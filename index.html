@@ -99,6 +99,12 @@ footer{
 footer b{color:var(--ink2)}
 footer a{color:var(--accent);text-decoration:none;font-weight:600}
 input[type=file]{display:none}
+.spin{
+  flex:none;width:16px;height:16px;border-radius:50%;
+  border:2.5px solid var(--line2);border-top-color:var(--accent);
+  animation:spin .8s linear infinite;
+}
+@keyframes spin{to{transform:rotate(360deg)}}
 .toast{
   position:absolute;left:50%;bottom:52px;transform:translateX(-50%);
   background:var(--surface);border:1px solid var(--line2);border-radius:10px;color:var(--ink);
@@ -620,7 +626,7 @@ async function autoScaleFromDims(srcCanvas){
     if(!resp.ok) return false;
     const j=await resp.json();
     const o=JSON.parse(j.choices[0].message.content);
-    if(S!==mine||S.sized) return false;                    // 그 사이 새 도면이 오거나 평형을 골랐다
+    if(S!==mine||S.sized||S.dimCancelled) return false;    // 그 사이 새 도면·직접 선택·건너뛰기
     const wM=(o.bottom||[]).reduce((a,b)=>a+(+b||0),0)/1000;
     const hM=(o.side  ||[]).reduce((a,b)=>a+(+b||0),0)/1000;
     const okW=wM>=5&&wM<=30, okH=hM>=3&&hM<=30;
@@ -855,8 +861,17 @@ function renderStep(){
     return;
   }
   if(!S.sized){
+    if(S.pendingDim){
+      // 치수를 읽는 몇 초 동안은 선택지를 감춘다 — 먼저 눌러버리면 자동 축척이 무효가 된다
+      el.innerHTML=`<span class="spin" aria-hidden="true"></span><span class="st">도면의 치수를 읽고 있어요…</span>
+        <span class="sd">치수 숫자가 있으면 집 크기를 자동으로 맞춥니다 — 잠깐이면 됩니다</span>
+        <span class="grow"></span><button class="tbtn" id="sSkipDim">건너뛰고 직접 선택</button>`;
+      document.getElementById('sSkipDim').onclick=()=>{ S.pendingDim=false; S.dimCancelled=true; renderStep(); };
+      hint.hidden=false; hint.textContent='벽 분석 결과입니다 — 두꺼운 선이 외벽·내력벽, 얇은 선이 경량벽·창호입니다.';
+      return;
+    }
     el.innerHTML=`<span class="sn">2</span><span class="st">집 크기를 골라주세요</span>
-      <span class="sd">${S.pendingDim?'도면의 치수 숫자를 읽는 중입니다 — 잠깐이면 돼요. 급하면 아래에서 바로 고르세요':'공급면적 기준 — 벽 분석 결과를 실제 치수로 맞춥니다'}</span><span class="grow"></span>
+      <span class="sd">공급면적 기준 — 벽 분석 결과를 실제 치수로 맞춥니다</span><span class="grow"></span>
       ${[20,25,30,34,40].map(p=>`<button class="chip" data-p="${p}">${p}평대</button>`).join('')}
       <button class="chip" data-p="0">직접 입력</button>`;
     el.querySelectorAll('[data-p]').forEach(b=>b.onclick=()=>{
