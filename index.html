@@ -149,7 +149,8 @@ input[type=file]{display:none}
   <div class="legend" id="legend" hidden
     <span><i style="background:var(--bad)"></i>안 닿음</span>
     <span><i style="background:var(--warn)"></i>아슬아슬</span>
-    <span><i style="background:var(--good);opacity:.5"></i>안정</span>
+    <span><i style="background:var(--good);opacity:.45"></i>양호</span>
+    <span><i style="background:#22aa64"></i>강함</span>
   </div>
   <div class="hint" id="hint" hidden></div>
   <div class="zoom">
@@ -785,9 +786,10 @@ function computeHeat(){
     total++;
     const v=S.aps.length?rssiAt(b.x+(i+0.5)*cell, b.y+(j+0.5)*cell):-200;
     let r,g2,bl,a,ac;
-    if(v<TH_BAD){ r=192;g2=68;bl=47;a=118; ac=185; dead++; }
-    else if(v<TH_WARN){ r=217;g2=131;bl=36;a=88; ac=135; warn++; }
-    else { r=63;g2=143;bl=94;a=36; ac=26; }
+    if(v<TH_BAD){ r=192;g2=68;bl=47;a=118; ac=185; dead++; }          // 안 닿음
+    else if(v<TH_WARN){ r=217;g2=131;bl=36;a=88; ac=135; warn++; }    // 아슬아슬
+    else if(v<-55){ r=63;g2=143;bl=94;a=42; ac=80; }                  // 양호 — 연초록
+    else { r=34;g2=170;bl=100;a=70; ac=130; }                         // 강함 — 진초록
     const o=p*4;
     img.data[o]=r; img.data[o+1]=g2; img.data[o+2]=bl; img.data[o+3]=a;
     imgC.data[o]=Math.min(255,r+30); imgC.data[o+1]=g2+20; imgC.data[o+2]=bl+20; imgC.data[o+3]=ac;
