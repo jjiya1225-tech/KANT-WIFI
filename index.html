@@ -99,6 +99,16 @@ footer{
 footer b{color:var(--ink2)}
 footer a{color:var(--accent);text-decoration:none;font-weight:600}
 input[type=file]{display:none}
+.vt{
+  position:absolute;right:10px;top:10px;display:flex;gap:3px;
+  background:rgba(255,255,255,.92);border:1px solid var(--line2);border-radius:9px;padding:3px;
+  backdrop-filter:blur(6px);box-shadow:0 1px 4px rgba(29,29,31,.08);
+}
+.vt button{
+  border:0;background:transparent;border-radius:7px;padding:5px 11px;cursor:pointer;
+  font:inherit;font-size:12px;font-weight:500;color:var(--ink2);
+}
+.vt button[aria-pressed="true"]{background:var(--accent);color:#fff}
 .spin{
   flex:none;width:16px;height:16px;border-radius:50%;
   border:2.5px solid var(--line2);border-top-color:var(--accent);
@@ -132,7 +142,11 @@ input[type=file]{display:none}
     <b>아파트 도면을 올려보세요</b>
     <span>벽을 자동으로 분석해서, 공유기 위치에 따라 어느 공간에 WiFi 신호가 안 닿는지 보여드립니다.</span>
   </div>
-  <div class="legend" id="legend" hidden>
+  <div class="vt" id="vt" hidden>
+    <button data-v="cad" aria-pressed="true">정리 도면</button>
+    <button data-v="orig" aria-pressed="false">원본</button>
+  </div>
+  <div class="legend" id="legend" hidden
     <span><i style="background:var(--bad)"></i>안 닿음</span>
     <span><i style="background:var(--warn)"></i>아슬아슬</span>
     <span><i style="background:var(--good);opacity:.5"></i>안정</span>
@@ -176,7 +190,7 @@ const N_EXP=2.2, FADE=3, EIRP=21, TH_BAD=-70, TH_WARN=-64;   // KT급 공유기,
 
 /* ---------- 상태 ---------- */
 let S=null;
-function freshState(){ return {bg:null, mpp:1, walls:[], rooms:[], aps:[], sized:false}; }
+function freshState(){ return {bg:null, mpp:1, walls:[], rooms:[], aps:[], sized:false, view:'cad'}; }
 S=freshState();
 let view={s:60,ox:40,oy:40}, userMoved=false;
 let GRID=null, gridSig='';
@@ -714,12 +728,19 @@ function exportPng(){
   const g=c.getContext('2d');
   const PX=x=>(x-bb.x)*s+pad, PY=y=>(y-bb.y)*s+headH+pad/2;
   g.fillStyle='#ffffff'; g.fillRect(0,0,W,H);
-  if(S.bg&&S.bg.img){ g.globalAlpha=0.92; g.drawImage(S.bg.img,PX(0),PY(0),S.bg.w*S.mpp*s,S.bg.h*S.mpp*s); g.globalAlpha=1; }
-  if(S.aps.length) g.drawImage(heatCv,PX(G.b.x),PY(G.b.y),G.b.w*s,G.b.h*s);
+  const cad=isCad();
+  if(cad){
+    const b2=wallsBox(), pad2=0.6;
+    if(b2){ g.fillStyle=CADBG; g.beginPath();
+      if(g.roundRect) g.roundRect(PX(b2.x-pad2),PY(b2.y-pad2),(b2.w+pad2*2)*s,(b2.h+pad2*2)*s,14);
+      else g.rect(PX(b2.x-pad2),PY(b2.y-pad2),(b2.w+pad2*2)*s,(b2.h+pad2*2)*s);
+      g.fill(); }
+  } else if(S.bg&&S.bg.img){ g.globalAlpha=0.92; g.drawImage(S.bg.img,PX(0),PY(0),S.bg.w*S.mpp*s,S.bg.h*S.mpp*s); g.globalAlpha=1; }
+  if(S.aps.length) g.drawImage(cad?heatCvCad:heatCv,PX(G.b.x),PY(G.b.y),G.b.w*s,G.b.h*s);
   g.lineCap='round';
   for(const w of S.walls){
     const t=WT[w.t]||WT.light;
-    g.strokeStyle=t.c; g.lineWidth=Math.max(1.5,t.w*s/60);
+    g.strokeStyle=cad?(CADC[w.t]||CADC.light):t.c; g.lineWidth=Math.max(1.5,t.w*s/60);
     g.beginPath(); g.moveTo(PX(w.x1),PY(w.y1)); g.lineTo(PX(w.x2),PY(w.y2)); g.stroke();
   }
   for(const ap of S.aps){
@@ -749,25 +770,29 @@ function exportPng(){
 
 /* ---------- 히트맵 + 판정 ---------- */
 let lastStats={dead:0,warn:0,total:0};
+let heatCvCad=null;   // 남색 CAD 바탕용 — 안정은 거의 안 칠하고 미달·아슬만 또렷하게
 function computeHeat(){
   const G=ensureGrid();
   const {b,cell,gw,gh,inside}=G;
   heatCv=document.createElement('canvas'); heatCv.width=gw; heatCv.height=gh;
-  const hg=heatCv.getContext('2d');
-  const img=hg.createImageData(gw,gh);
+  heatCvCad=document.createElement('canvas'); heatCvCad.width=gw; heatCvCad.height=gh;
+  const hg=heatCv.getContext('2d'), hc=heatCvCad.getContext('2d');
+  const img=hg.createImageData(gw,gh), imgC=hc.createImageData(gw,gh);
   let dead=0,warn=0,total=0;
   for(let j=0;j<gh;j++)for(let i=0;i<gw;i++){
     const p=j*gw+i;
     if(!inside[p]) continue;
     total++;
     const v=S.aps.length?rssiAt(b.x+(i+0.5)*cell, b.y+(j+0.5)*cell):-200;
-    let r,g2,bl,a;
-    if(v<TH_BAD){ r=192;g2=68;bl=47;a=118; dead++; }
-    else if(v<TH_WARN){ r=217;g2=131;bl=36;a=88; warn++; }
-    else { r=63;g2=143;bl=94;a=36; }
-    const o=p*4; img.data[o]=r; img.data[o+1]=g2; img.data[o+2]=bl; img.data[o+3]=a;
+    let r,g2,bl,a,ac;
+    if(v<TH_BAD){ r=192;g2=68;bl=47;a=118; ac=185; dead++; }
+    else if(v<TH_WARN){ r=217;g2=131;bl=36;a=88; ac=135; warn++; }
+    else { r=63;g2=143;bl=94;a=36; ac=26; }
+    const o=p*4;
+    img.data[o]=r; img.data[o+1]=g2; img.data[o+2]=bl; img.data[o+3]=a;
+    imgC.data[o]=Math.min(255,r+30); imgC.data[o+1]=g2+20; imgC.data[o+2]=bl+20; imgC.data[o+3]=ac;
   }
-  hg.putImageData(img,0,0);
+  hg.putImageData(img,0,0); hc.putImageData(imgC,0,0);
   lastStats={dead:dead*cell*cell, warn:warn*cell*cell, total:total*cell*cell};
   heatDirty=false;
 }
@@ -795,12 +820,36 @@ function fit(){
 const X=x=>x*view.s+view.ox, Y=y=>y*view.s+view.oy;
 const mx=px=>(px-view.ox)/view.s, my=py=>(py-view.oy)/view.s;
 
+/* CAD풍 정리 도면 — 원본 사진 대신 인식된 벡터만 남색 바탕에 다시 그린다.
+   글자·가구·워터마크가 구조적으로 사라져서 «정리»가 된다. */
+const CADBG='#171a2b';
+const CADC={ext:'#f2f4fa',bear:'#e8ebf5',brick:'#e8ebf5',light:'#c3c9dc',tile:'#c3c9dc',metal:'#f2f4fa',door:'#8a93b0',glass:'#6fc3e8'};
+function isCad(){ return !!(S.bg&&S.bg.img&&S.walls.length&&S.view!=='orig'); }
+function wallsBox(){
+  let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;
+  for(const w of S.walls){
+    x0=Math.min(x0,w.x1,w.x2); x1=Math.max(x1,w.x1,w.x2);
+    y0=Math.min(y0,w.y1,w.y2); y1=Math.max(y1,w.y1,w.y2);
+  }
+  return x0>x1?null:{x:x0,y:y0,w:x1-x0,h:y1-y0};
+}
+
 function draw(){
   ctx.clearRect(0,0,CW,CH);
   const hasPlan=S.walls.length>0||S.bg;
   if(!hasPlan) return;
+  const cad=isCad();
   // 배경 도면
-  if(S.bg&&S.bg.img){
+  if(cad){
+    const b=wallsBox(), pad=0.6;
+    if(b){
+      ctx.fillStyle=CADBG;
+      const rx=X(b.x-pad), ry=Y(b.y-pad), rw=(b.w+pad*2)*view.s, rh=(b.h+pad*2)*view.s;
+      ctx.beginPath();
+      if(ctx.roundRect) ctx.roundRect(rx,ry,rw,rh,10); else ctx.rect(rx,ry,rw,rh);
+      ctx.fill();
+    }
+  } else if(S.bg&&S.bg.img){
     ctx.globalAlpha=0.92;
     ctx.drawImage(S.bg.img, X(0), Y(0), S.bg.w*S.mpp*view.s, S.bg.h*S.mpp*view.s);
     ctx.globalAlpha=1;
@@ -814,18 +863,19 @@ function draw(){
       ctx.fillText(r[0], X((r[1]+r[3])/2), Y((r[2]+r[4])/2));
     }
   }
-  // 히트맵
+  // 히트맵 (CAD 바탕에서는 전용 팔레트)
   if(S.aps.length){
     if(heatDirty||!heatCv) computeHeat();
     const G=ensureGrid();
     ctx.imageSmoothingEnabled=true;
-    ctx.drawImage(heatCv, X(G.b.x), Y(G.b.y), G.b.w*view.s, G.b.h*view.s);
+    ctx.drawImage(cad?heatCvCad:heatCv, X(G.b.x), Y(G.b.y), G.b.w*view.s, G.b.h*view.s);
   }
   // 벽
   ctx.lineCap='round';
   for(const w of S.walls){
     const t=WT[w.t]||WT.light;
-    ctx.strokeStyle=t.c; ctx.lineWidth=Math.max(1.5,t.w*view.s/60);
+    ctx.strokeStyle=cad?(CADC[w.t]||CADC.light):t.c;
+    ctx.lineWidth=Math.max(1.5,t.w*view.s/60);
     ctx.beginPath(); ctx.moveTo(X(w.x1),Y(w.y1)); ctx.lineTo(X(w.x2),Y(w.y2)); ctx.stroke();
   }
   // 공유기
@@ -848,6 +898,9 @@ function renderStep(){
   const hasPlan=S.walls.length>0||S.bg;
   document.getElementById('empty').hidden=!!hasPlan;
   document.getElementById('legend').hidden=!(hasPlan&&S.aps.length);
+  const vt=document.getElementById('vt');
+  vt.hidden=!(S.bg&&S.walls.length);
+  vt.querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed', String((S.view!=='orig')===(b.dataset.v==='cad'))));
   const hint=document.getElementById('hint');
 
   if(!hasPlan){
@@ -983,6 +1036,7 @@ function applyBg(c){
       S.pendingDim=true;
       autoScaleFromDims(c).then(ok=>{ if(!ok&&S.pendingDim){ S.pendingDim=false; renderStep(); } else S.pendingDim=false; });
     } else {
+      S.view='orig';                                       // 벡터가 없으면 정리 도면도 없다
       toast('벽을 분석하지 못한 도면입니다 — 다른 캡처로 시도해 보세요');
     }
     GRID=null; gridSig=''; heatDirty=true;
@@ -1064,6 +1118,10 @@ cv.addEventListener('wheel',e=>{
   view.oy=p.y-(p.y-view.oy)*(ns/view.s);
   view.s=ns; userMoved=true; draw();
 },{passive:false});
+document.getElementById('vt').onclick=e=>{
+  const b=e.target.closest('button'); if(!b) return;
+  S.view=b.dataset.v; renderStep(); draw();
+};
 document.getElementById('zIn').onclick=()=>{view.s*=1.25;view.ox=CW/2-(CW/2-view.ox)*1.25;view.oy=CH/2-(CH/2-view.oy)*1.25;draw();};
 document.getElementById('zOut').onclick=()=>{view.s/=1.25;view.ox=CW/2-(CW/2-view.ox)/1.25;view.oy=CH/2-(CH/2-view.oy)/1.25;draw();};
 
