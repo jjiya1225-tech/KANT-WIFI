@@ -7,11 +7,13 @@
 <meta name="description" content="아파트 도면을 올리면 벽을 자동 분석해, 공유기 위치에서 WiFi 신호가 안 닿는 공간을 시공 전에 보여줍니다.">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <style>
+/* LUX PRO 화이트 모드 토큰을 그대로 따른다 */
 :root{
-  --bg:#0E0F15; --surface:#171923; --line:#2C3042; --line2:#3A3F55;
-  --ink:#ECEEF6; --ink2:#A3A8BF; --ink3:#727892;
-  --accent:#7F88FF; --accentSoft:#212545;
-  --good:#2ECF8E; --warn:#EFC04E; --bad:#FF6C87;
+  --bg:#f5f5f7; --surface:#ffffff; --line:#e5e5ea; --line2:#d2d2d7;
+  --ink:#1d1d1f; --ink2:#555555; --ink3:#86868b;
+  --accent:#1e3a63; --accentHover:#162e50; --accentSoft:#e8edf5;
+  --good:#3f8f5e; --warn:#d98324; --bad:#c0442f;
+  --canvas:#e2e6e9;
 }
 *{box-sizing:border-box}
 [hidden]{display:none!important}
@@ -55,7 +57,7 @@ header .sp{flex:1}
   background:var(--accent);border:1px solid var(--accent);border-radius:9px;color:#fff;
   padding:8px 14px;font:inherit;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;
 }
-.abtn:hover{filter:brightness(1.1)}
+.abtn:hover{background:var(--accentHover)}
 .abtn.ghost{background:transparent;color:var(--accent)}
 .chip{
   background:var(--accentSoft);border:1px solid var(--line2);border-radius:9px;color:var(--ink);
@@ -63,7 +65,7 @@ header .sp{flex:1}
 }
 .chip:hover{border-color:var(--accent)}
 
-main{flex:1;min-height:0;position:relative;background:#10111a}
+main{flex:1;min-height:0;position:relative;background:var(--canvas)}
 canvas{display:block;width:100%;height:100%;touch-action:none}
 .empty{
   position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
@@ -74,18 +76,20 @@ canvas{display:block;width:100%;height:100%;touch-action:none}
 .empty span{font-size:12.5px;max-width:420px}
 .hint{
   position:absolute;left:10px;bottom:10px;right:56px;pointer-events:none;
-  font-size:12px;color:var(--ink2);background:rgba(23,25,35,.88);border:1px solid var(--line);
+  font-size:12px;color:var(--ink2);background:rgba(255,255,255,.92);border:1px solid var(--line2);
   border-radius:8px;padding:6px 10px;backdrop-filter:blur(6px);max-width:520px;
+  box-shadow:0 1px 4px rgba(29,29,31,.08);
 }
 .zoom{position:absolute;right:10px;bottom:10px;display:flex;flex-direction:column;gap:5px}
 .zoom button{
-  width:32px;height:32px;border-radius:8px;border:1px solid var(--line);cursor:pointer;
-  background:rgba(23,25,35,.88);color:var(--ink2);display:grid;place-items:center;backdrop-filter:blur(6px);
+  width:32px;height:32px;border-radius:8px;border:1px solid var(--line2);cursor:pointer;
+  background:rgba(255,255,255,.92);color:var(--ink2);display:grid;place-items:center;backdrop-filter:blur(6px);
 }
 .legend{
   position:absolute;left:10px;top:10px;display:flex;gap:12px;pointer-events:none;
-  font-size:11.5px;color:var(--ink2);background:rgba(23,25,35,.88);border:1px solid var(--line);
+  font-size:11.5px;color:var(--ink2);background:rgba(255,255,255,.92);border:1px solid var(--line2);
   border-radius:8px;padding:5px 11px;backdrop-filter:blur(6px);
+  box-shadow:0 1px 4px rgba(29,29,31,.08);
 }
 .legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
 footer{
@@ -98,7 +102,7 @@ input[type=file]{display:none}
 .toast{
   position:absolute;left:50%;bottom:52px;transform:translateX(-50%);
   background:var(--surface);border:1px solid var(--line2);border-radius:10px;color:var(--ink);
-  padding:9px 15px;font-size:13px;box-shadow:0 8px 30px rgba(0,0,0,.4);
+  padding:9px 15px;font-size:13px;box-shadow:0 8px 30px rgba(29,29,31,.18);
   opacity:0;transition:opacity .25s;pointer-events:none;white-space:nowrap;z-index:20;
 }
 .toast.on{opacity:1}
@@ -588,9 +592,9 @@ function computeHeat(){
     total++;
     const v=S.aps.length?rssiAt(b.x+(i+0.5)*cell, b.y+(j+0.5)*cell):-200;
     let r,g2,bl,a;
-    if(v<TH_BAD){ r=255;g2=92;bl=125;a=115; dead++; }
-    else if(v<TH_WARN){ r=239;g2=192;bl=78;a=80; warn++; }
-    else { r=46;g2=207;bl=142;a=34; }
+    if(v<TH_BAD){ r=192;g2=68;bl=47;a=118; dead++; }
+    else if(v<TH_WARN){ r=217;g2=131;bl=36;a=88; warn++; }
+    else { r=63;g2=143;bl=94;a=36; }
     const o=p*4; img.data[o]=r; img.data[o+1]=g2; img.data[o+2]=bl; img.data[o+3]=a;
   }
   hg.putImageData(img,0,0);
@@ -633,9 +637,9 @@ function draw(){
   } else {
     // 샘플: 방 채움 + 라벨
     for(const r of S.rooms){
-      ctx.fillStyle='rgba(236,238,246,0.06)';
+      ctx.fillStyle='rgba(255,255,255,0.75)';
       ctx.fillRect(X(r[1]),Y(r[2]),(r[3]-r[1])*view.s,(r[4]-r[2])*view.s);
-      ctx.fillStyle='rgba(163,168,191,0.8)';
+      ctx.fillStyle='rgba(85,85,85,0.9)';
       ctx.font='11px sans-serif'; ctx.textAlign='center';
       ctx.fillText(r[0], X((r[1]+r[3])/2), Y((r[2]+r[4])/2));
     }
@@ -657,7 +661,7 @@ function draw(){
   // 공유기
   for(const ap of S.aps){
     const px=X(ap.x),py=Y(ap.y);
-    ctx.fillStyle='#7F88FF'; ctx.strokeStyle='#fff';
+    ctx.fillStyle='#1e3a63'; ctx.strokeStyle='#fff';
     ctx.beginPath(); ctx.arc(px,py,11,0,7); ctx.fill();
     ctx.lineWidth=1.6;
     ctx.beginPath(); ctx.arc(px,py+3,4.5,Math.PI*1.15,Math.PI*1.85); ctx.stroke();
