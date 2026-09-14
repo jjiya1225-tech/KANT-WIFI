@@ -513,19 +513,19 @@ function segCross(ax,ay,bx,by,cx,cy,dx,dy){
   return ua>0&&ua<1&&ub>0&&ub<1;
 }
 const WW=[1,1,0.75,0.6,0.5,0.4];
+function rssiOne(ap,x,y){
+  const losses=[];
+  for(const w of S.walls) if(segCross(ap.x,ap.y,x,y,w.x1,w.y1,w.x2,w.y2)) losses.push(WT[w.t].a);
+  losses.sort((p,q)=>q-p);
+  let wl=0;
+  for(let i=0;i<losses.length;i++) wl+=losses[i]*(WW[i]!==undefined?WW[i]:0.3);
+  wl=Math.min(wl,40);
+  const d=Math.max(0.6,Math.hypot(x-ap.x,y-ap.y));
+  return EIRP-(40.0+10*N_EXP*Math.log10(d))-wl-FADE;
+}
 function rssiAt(x,y){
   let best=-200;
-  for(const ap of S.aps){
-    const losses=[];
-    for(const w of S.walls) if(segCross(ap.x,ap.y,x,y,w.x1,w.y1,w.x2,w.y2)) losses.push(WT[w.t].a);
-    losses.sort((p,q)=>q-p);
-    let wl=0;
-    for(let i=0;i<losses.length;i++) wl+=losses[i]*(WW[i]!==undefined?WW[i]:0.3);
-    wl=Math.min(wl,40);
-    const d=Math.max(0.6,Math.hypot(x-ap.x,y-ap.y));
-    const v=EIRP-(40.0+10*N_EXP*Math.log10(d))-wl-FADE;
-    if(v>best) best=v;
-  }
+  for(const ap of S.aps){ const v=rssiOne(ap,x,y); if(v>best) best=v; }
   return best;
 }
 
@@ -575,6 +575,170 @@ function ensureGrid(){
   GRID={b,cell,gw,gh,inside,leaked,area:cnt*cell*cell};
   gridSig=sig;
   return GRID;
+}
+
+/* ---------- 치수선 자동 축척 (GPT-4o-mini OCR, 실패하면 평형 선택으로) ----------
+   합계만 쓴다: 개별 숫자는 거칠어도 가로·세로 «합»은 수 % 안쪽임을 표본으로 확인.
+   인식된 외곽 비율과 교차 검증해서 어긋나면 버린다. */
+const AI_PROXY='https://kant-ai-proxy.jjiya1225.workers.dev';
+const DIM_PROMPT=`아파트 평면도 이미지에서 치수선 숫자만 읽는다. JSON 으로만 답한다.
+
+평면도 도면 바깥 테두리에는 mm 단위 치수 숫자가 벽 구간별로 적혀 있을 수 있다.
+- bottom: 도면 아래(또는 위) 가로 방향 치수 사슬의 숫자들을 왼쪽→오른쪽 순서로. mm 정수.
+- side: 도면 옆(왼쪽 또는 오른쪽) 세로 방향 치수 사슬의 숫자들을 위→아래 순서로. mm 정수.
+- 사슬이 여러 겹이면(구간 치수 + 전체 치수) 「구간 합 = 전체」가 되는 구간 사슬을 골라라.
+- 이미지에 실제로 보이는 숫자만 적어라. 치수 숫자가 없으면 빈 배열. 지어내면 안 된다.
+- 면적 표기(㎡)나 방 이름, 범례·축척 막대 숫자는 치수가 아니다.
+
+스키마: {"bottom":[정수,...],"side":[정수,...]}`;
+
+async function autoScaleFromDims(srcCanvas){
+  const mine=S;
+  try{
+    const k=Math.min(1,1000/Math.max(srcCanvas.width,srcCanvas.height));
+    const c=document.createElement('canvas');
+    c.width=Math.round(srcCanvas.width*k); c.height=Math.round(srcCanvas.height*k);
+    c.getContext('2d').drawImage(srcCanvas,0,0,c.width,c.height);
+    const ctrl=new AbortController();
+    const tid=setTimeout(()=>ctrl.abort(),20000);
+    const resp=await fetch(AI_PROXY+'/api/chat',{
+      method:'POST', signal:ctrl.signal,
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        model:'gpt-4o-mini', max_tokens:300, temperature:0,
+        response_format:{type:'json_object'},
+        messages:[
+          {role:'system',content:DIM_PROMPT},
+          {role:'user',content:[
+            {type:'text',text:'치수 숫자를 읽어라.'},
+            {type:'image_url',image_url:{url:c.toDataURL('image/jpeg',0.85),detail:'high'}},
+          ]},
+        ],
+      }),
+    });
+    clearTimeout(tid);
+    if(!resp.ok) return false;
+    const j=await resp.json();
+    const o=JSON.parse(j.choices[0].message.content);
+    if(S!==mine||S.sized) return false;                    // 그 사이 새 도면이 오거나 평형을 골랐다
+    const wM=(o.bottom||[]).reduce((a,b)=>a+(+b||0),0)/1000;
+    const hM=(o.side  ||[]).reduce((a,b)=>a+(+b||0),0)/1000;
+    const okW=wM>=5&&wM<=30, okH=hM>=3&&hM<=30;
+    if(!okW&&!okH) return false;
+    // 치수는 이미지가 아니라 «도면 부분»의 폭이다 — 벽 외곽 박스를 기준으로 잰다
+    let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;
+    for(const w of S.walls){
+      x0=Math.min(x0,w.x1,w.x2); x1=Math.max(x1,w.x1,w.x2);
+      y0=Math.min(y0,w.y1,w.y2); y1=Math.max(y1,w.y1,w.y2);
+    }
+    if(x0>x1) return false;
+    const bb={w:x1-x0,h:y1-y0};
+    let f=null;
+    if(okW&&okH){
+      const ratio=(wM/hM)/(bb.w/bb.h);
+      if(ratio<0.82||ratio>1.22) return false;             // 인식 외곽과 비율이 어긋나면 불신
+      f=(wM/bb.w+hM/bb.h)/2;
+    } else f=okW?wM/bb.w:hM/bb.h;
+    if(!(bb.w*f>=5&&bb.w*f<=30)) return false;
+    S.mpp*=f;
+    for(const w of S.walls){w.x1*=f;w.y1*=f;w.x2*=f;w.y2*=f;}
+    for(const a of S.aps){a.x*=f;a.y*=f;}
+    S.sized=true;
+    GRID=null; gridSig=''; heatDirty=true;
+    fit(); draw(); renderStep();
+    toast(`도면 치수를 읽어 가로 ${(bb.w*f).toFixed(1)} m로 맞췄습니다`);
+    return true;
+  }catch(e){ return false; }
+}
+
+/* ---------- 공유기 최적 자리 추천 ---------- */
+function coarseCells(){
+  const G=ensureGrid();
+  const step=Math.max(1,Math.round(0.55/G.cell));
+  let cells=[];
+  for(let j=0;j<G.gh;j+=step)for(let i=0;i<G.gw;i+=step)
+    if(G.inside[j*G.gw+i]) cells.push([G.b.x+(i+0.5)*G.cell, G.b.y+(j+0.5)*G.cell]);
+  while(cells.length>520) cells=cells.filter((_,k2)=>k2%2===0);
+  return cells;
+}
+function bestSpotFor(fixedAps,cells,cands){
+  const base=cells.map(([x,y])=>{
+    let b=-200; for(const a of fixedAps){const v=rssiOne(a,x,y); if(v>b)b=v;} return b;
+  });
+  let best=null,bs=-Infinity;
+  for(const cd of cands){
+    const cand={x:cd[0],y:cd[1]};
+    let cover=0,margin=0;
+    for(let i=0;i<cells.length;i++){
+      const v=Math.max(base[i], rssiOne(cand,cells[i][0],cells[i][1]));
+      if(v>=TH_BAD) cover++;
+      margin+=Math.min(v,-40);
+    }
+    const sc=cover*1000+margin/cells.length;
+    if(sc>bs){bs=sc;best=cd;}
+  }
+  return best;
+}
+function recommendSpots(){
+  toast('최적 자리를 계산하는 중…');
+  setTimeout(()=>{
+    const cells=coarseCells(), cands=cells;
+    if(!S.aps.length){
+      const p=bestSpotFor([],cells,cands);
+      if(p) S.aps.push({id:'ap'+Date.now().toString(36), x:p[0], y:p[1]});
+    } else {
+      for(const ap of S.aps){
+        const others=S.aps.filter(a=>a!==ap);
+        const p=bestSpotFor(others,cells,cands);
+        if(p){ ap.x=p[0]; ap.y=p[1]; }
+      }
+    }
+    heatDirty=true; draw(); renderStep();
+    toast(`추천 완료 — 신호 미달 ${lastStats.dead.toFixed(1)}㎡. 인터넷 인입 위치도 감안해 조정하세요`);
+  },40);
+}
+
+/* ---------- 결과 이미지 저장 ---------- */
+function exportPng(){
+  if(heatDirty||!heatCv) computeHeat();
+  const bb=bbox(), G=ensureGrid();
+  const W=1500, pad=44, headH=96, footH=52;
+  const s=(W-pad*2)/bb.w, H=Math.round(headH+bb.h*s+footH+pad);
+  const c=document.createElement('canvas'); c.width=W; c.height=H;
+  const g=c.getContext('2d');
+  const PX=x=>(x-bb.x)*s+pad, PY=y=>(y-bb.y)*s+headH+pad/2;
+  g.fillStyle='#ffffff'; g.fillRect(0,0,W,H);
+  if(S.bg&&S.bg.img){ g.globalAlpha=0.92; g.drawImage(S.bg.img,PX(0),PY(0),S.bg.w*S.mpp*s,S.bg.h*S.mpp*s); g.globalAlpha=1; }
+  if(S.aps.length) g.drawImage(heatCv,PX(G.b.x),PY(G.b.y),G.b.w*s,G.b.h*s);
+  g.lineCap='round';
+  for(const w of S.walls){
+    const t=WT[w.t]||WT.light;
+    g.strokeStyle=t.c; g.lineWidth=Math.max(1.5,t.w*s/60);
+    g.beginPath(); g.moveTo(PX(w.x1),PY(w.y1)); g.lineTo(PX(w.x2),PY(w.y2)); g.stroke();
+  }
+  for(const ap of S.aps){
+    const px=PX(ap.x),py=PY(ap.y);
+    g.fillStyle='#1e3a63'; g.strokeStyle='#fff';
+    g.beginPath(); g.arc(px,py,13,0,7); g.fill();
+    g.lineWidth=2;
+    g.beginPath(); g.arc(px,py+3.5,5.5,Math.PI*1.15,Math.PI*1.85); g.stroke();
+    g.beginPath(); g.arc(px,py+3.5,9.5,Math.PI*1.2,Math.PI*1.8); g.stroke();
+    g.fillStyle='#fff'; g.beginPath(); g.arc(px,py+4.6,2,0,7); g.fill();
+  }
+  const dead=lastStats.dead, total=Math.max(0.01,lastStats.total), dp=dead/total*100;
+  g.fillStyle='#1d1d1f'; g.font='700 30px -apple-system,sans-serif'; g.textAlign='left';
+  g.fillText('WiFi 사각지대 체크', pad, 46);
+  g.font='600 22px -apple-system,sans-serif';
+  if(dp<1.5){ g.fillStyle='#3f8f5e'; g.fillText(`사각지대가 거의 없습니다 — 전체 ${total.toFixed(0)}㎡ 중 신호 미달 ${dead.toFixed(1)}㎡`, pad, 78); }
+  else{ g.fillStyle='#c0442f'; g.fillText(`신호 안 닿는 공간 ${dead.toFixed(1)}㎡ (${dp.toFixed(0)}%) — 빨간 구역은 IoT 등록이 어려울 수 있습니다`, pad, 78); }
+  g.fillStyle='#86868b'; g.font='400 17px -apple-system,sans-serif';
+  g.fillText('실측이 아닌 설계 예측입니다 · 칸트라이팅 KANT · kantlighting.com', pad, H-20);
+  g.textAlign='right'; g.fillText(new Date().toLocaleDateString('ko-KR'), W-pad, 46);
+  const a=document.createElement('a');
+  a.href=c.toDataURL('image/png');
+  a.download='KANT_WiFi사각지대체크.png';
+  document.body.appendChild(a); a.click(); a.remove();
+  toast('결과 이미지를 저장했습니다');
 }
 
 /* ---------- 히트맵 + 판정 ---------- */
@@ -692,7 +856,7 @@ function renderStep(){
   }
   if(!S.sized){
     el.innerHTML=`<span class="sn">2</span><span class="st">집 크기를 골라주세요</span>
-      <span class="sd">공급면적 기준 — 벽 분석 결과를 실제 치수로 맞춥니다</span><span class="grow"></span>
+      <span class="sd">${S.pendingDim?'도면의 치수 숫자를 읽는 중입니다 — 잠깐이면 돼요. 급하면 아래에서 바로 고르세요':'공급면적 기준 — 벽 분석 결과를 실제 치수로 맞춥니다'}</span><span class="grow"></span>
       ${[20,25,30,34,40].map(p=>`<button class="chip" data-p="${p}">${p}평대</button>`).join('')}
       <button class="chip" data-p="0">직접 입력</button>`;
     el.querySelectorAll('[data-p]').forEach(b=>b.onclick=()=>{
@@ -705,7 +869,9 @@ function renderStep(){
   }
   if(!S.aps.length){
     el.innerHTML=`<span class="sn">3</span><span class="st">공유기 자리를 도면에서 눌러주세요</span>
-      <span class="sd">보통 거실 TV장 위나 현관 단자함입니다 — 놓은 뒤에도 끌어서 옮길 수 있습니다</span>`;
+      <span class="sd">보통 거실 TV장 위나 현관 단자함입니다 — 놓은 뒤에도 끌어서 옮길 수 있습니다</span>
+      <span class="grow"></span><button class="abtn ghost" id="sBest">추천 자리에 놓기</button>`;
+    document.getElementById('sBest').onclick=recommendSpots;
     hint.hidden=false; hint.textContent='도면에서 공유기가 있는(있을) 자리를 누르세요.';
     return;
   }
@@ -718,8 +884,12 @@ function renderStep(){
   else{ icon='<span class="sn bad">!</span>'; msg=`<span class="st" style="color:var(--bad)">신호 안 닿는 공간 ${dead.toFixed(1)}㎡ (${dp.toFixed(0)}%)</span>
     <span class="sd">빨간 구역은 IoT 기기 등록이 안 될 수 있는 곳입니다 — 공유기를 끌어 옮겨보거나 한 대 더 놓아보세요</span>`; }
   el.innerHTML=`${icon}${msg}<span class="grow"></span>
+    <button class="abtn" id="sSave">이미지 저장</button>
+    <button class="abtn ghost" id="sBest">최적 자리 추천</button>
     <button class="abtn ghost" id="sAdd">${addingAp?'놓을 곳을 누르세요…':'공유기 추가'}</button>
     ${S.aps.length>1?'<button class="tbtn" id="sDel">마지막 공유기 빼기</button>':''}`;
+  document.getElementById('sSave').onclick=exportPng;
+  document.getElementById('sBest').onclick=recommendSpots;
   document.getElementById('sAdd').onclick=()=>{ addingAp=!addingAp; renderStep(); };
   const del=document.getElementById('sDel');
   if(del) del.onclick=()=>{ S.aps.pop(); heatDirty=true; draw(); renderStep(); };
@@ -794,6 +964,9 @@ function applyBg(c){
       }
       S.walls=segs.map(s=>({x1:s.x1*S.mpp,y1:s.y1*S.mpp,x2:s.x2*S.mpp,y2:s.y2*S.mpp,t:s.kind}));
       toast(`벽 ${S.walls.length}개를 분석했습니다`);
+      // 치수선이 있으면 축척까지 자동 (실패하면 평형 선택이 그대로 남는다)
+      S.pendingDim=true;
+      autoScaleFromDims(c).then(ok=>{ if(!ok&&S.pendingDim){ S.pendingDim=false; renderStep(); } else S.pendingDim=false; });
     } else {
       toast('벽을 분석하지 못한 도면입니다 — 다른 캡처로 시도해 보세요');
     }
