@@ -1506,7 +1506,7 @@ function renderMode(){
       <div class="row">
         <button class="tbtn" id="btnUp">도면 올리기 (JPG·PNG·PDF)</button>
         <button class="tbtn" id="btnScale">축척 맞추기</button>
-        ${S.bg?'<button class="tbtn" id="btnRmBg">이미지 제거</button>':''}
+        ${S.bg?'<button class="tbtn" id="btnTrace">벽 다시 인식</button><button class="tbtn" id="btnRmBg">이미지 제거</button>':''}
         <button class="tbtn" id="btnSample">샘플 도면 불러오기</button>
       </div>
       <input type="file" id="fileIn" accept="image/*,application/pdf" hidden>
@@ -1516,6 +1516,14 @@ function renderMode(){
     document.getElementById('btnScale').onclick=()=>{mode='scale';renderMode();document.getElementById('hint').textContent=HINTS.scale;};
     document.getElementById('btnSample').onclick=()=>{ if(confirm('현재 작업을 버리고 샘플을 불러올까요?')){S=sampleState();sel=null;ghost=null;fit();commit();} };
     const rb=document.getElementById('btnRmBg'); if(rb) rb.onclick=()=>{S.bg=null;commit();};
+    const tb=document.getElementById('btnTrace'); if(tb) tb.onclick=()=>{
+      if(S.walls.length&&!confirm('지금 그려진 벽을 모두 지우고 도면에서 다시 인식할까요?')) return;
+      const cc=document.createElement('canvas'); cc.width=S.bg.w; cc.height=S.bg.h;
+      cc.getContext('2d').drawImage(S.bg.img,0,0,S.bg.w,S.bg.h);
+      const n=autoTraceWalls(cc);
+      commit();
+      toast(n?`벽 ${n}개를 다시 인식했습니다`:'벽을 자동 인식하지 못했습니다 — 벽 모드에서 직접 그려 주세요');
+    };
   }
   P.querySelectorAll('#fBand').forEach(s=>s.onchange=()=>{
     S.band=s.value;
@@ -2201,6 +2209,346 @@ function legendNote(){
 }
 
 /* ============================================================
+   벽 자동 인식 — 도면 이미지에서 벽 선분을 추출한다
+   원리: 벽 = 가장 어두운 «가늘고 긴» 채움. 어두운 픽셀 마스크에서
+   ① 벽 두께보다 넓은 덩어리(바닥 음영·가구 채움)를 침식/팽창으로 제거
+   ② 세로/가로 런 분석으로 직교 벽 사각형 추출
+   ③ 남은 성분에 직선 적합(실패 시 주축으로 쪼개 재시도) → 사선 벽
+   문·개구부는 채움이 끊긴 자리라서 저절로 뚫린다 (punch 불필요).
+   치수선·글자·문 호는 두께 2px 미만 / 잔차 초과로 걸러진다.
+   좌표는 원본 이미지 픽셀로 반환 — 호출부가 S.mpp 로 미터 환산.
+   ============================================================ */
+function traceWalls(src){
+  const W0=src.width,H0=src.height;
+  const k=Math.min(1,760/W0), W=Math.round(W0*k), H=Math.round(H0*k);
+  const c=document.createElement('canvas'); c.width=W; c.height=H;
+  const g=c.getContext('2d',{willReadFrequently:true});
+  g.drawImage(src,0,0,W,H);
+  const d=g.getImageData(0,0,W,H).data, N=W*H;
+  const gray=new Uint8Array(N);
+  for(let i=0;i<N;i++) gray[i]=(d[i*4]*77+d[i*4+1]*150+d[i*4+2]*29)>>8;
+
+  // Otsu 임계값 — 벽(어두움)과 배경을 가른다. 음영 오염을 막으려 상한 115
+  const hist=new Float64Array(256);
+  for(let i=0;i<N;i++) hist[gray[i]]++;
+  let sum=0; for(let t=0;t<256;t++) sum+=t*hist[t];
+  let sumB=0,wB=0,best=0,T=100;
+  for(let t=0;t<256;t++){
+    wB+=hist[t]; if(!wB) continue; const wF=N-wB; if(!wF) break;
+    sumB+=t*hist[t];
+    const mB=sumB/wB, mF=(sum-sumB)/wF, v=wB*wF*(mB-mF)*(mB-mF);
+    if(v>best){best=v;T=t;}
+  }
+  T=Math.max(60,Math.min(115,T));
+
+  const minLen=Math.max(12,Math.round(Math.max(W,H)*0.03));
+  const maxThick=Math.max(5,Math.round(Math.max(W,H)*0.028));
+
+  const mask=new Uint8Array(N);
+  for(let i=0;i<N;i++) mask[i]=gray[i]<T?1:0;
+  // 이미지 최외곽 2px 무시 (스크린샷 테두리·스캔 가장자리)
+  for(let x=0;x<W;x++){mask[x]=mask[W+x]=mask[(H-1)*W+x]=mask[(H-2)*W+x]=0;}
+  for(let y=0;y<H;y++){mask[y*W]=mask[y*W+1]=mask[y*W+W-1]=mask[y*W+W-2]=0;}
+  // 점 제거 (1px 창호 선은 살려야 하므로 이웃 2개까지 허용)
+  const m2=new Uint8Array(mask);
+  for(let y=1;y<H-1;y++)for(let x=1;x<W-1;x++){
+    const i=y*W+x; if(!mask[i]) continue;
+    let s=0; for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++) s+=mask[i+dy*W+dx];
+    if(s<3) m2[i]=0;
+  }
+  // 클로징(팽창→침식 2회) — 창호 이중선의 잔틈과 끊긴 얇은 선을 봉합한다.
+  // 문 개구부(수십 px)는 이 정도로 닫히지 않는다.
+  {
+    let cur=new Uint8Array(m2), nxt=new Uint8Array(N);
+    for(let it=0;it<2;it++){
+      nxt.set(cur);
+      for(let y=1;y<H-1;y++)for(let x=1;x<W-1;x++){
+        const i=y*W+x;
+        if(!cur[i]&&(cur[i-1]||cur[i+1]||cur[i-W]||cur[i+W])) nxt[i]=1;
+      }
+      const tmp=cur; cur=nxt; nxt=tmp;
+    }
+    for(let it=0;it<2;it++){
+      nxt.fill(0);
+      for(let y=1;y<H-1;y++)for(let x=1;x<W-1;x++){
+        const i=y*W+x;
+        if(cur[i]&&cur[i-1]&&cur[i+1]&&cur[i-W]&&cur[i+W]) nxt[i]=1;
+      }
+      const tmp=cur; cur=nxt; nxt=tmp;
+    }
+    // 침식으로 원래 1px 선이 소멸했다면 원본을 보존 (합집합)
+    for(let i=0;i<N;i++) m2[i]=m2[i]|cur[i];
+  }
+  // 벽 두께보다 깊은 덩어리 제거 (침식으로 심을 찾고 팽창시켜 지움)
+  {
+    const r=Math.ceil(maxThick/2)+1;
+    let cur=new Uint8Array(m2), nxt=new Uint8Array(N);
+    for(let it=0;it<r;it++){
+      nxt.fill(0);
+      for(let y=1;y<H-1;y++)for(let x=1;x<W-1;x++){
+        const i=y*W+x;
+        if(cur[i]&&cur[i-1]&&cur[i+1]&&cur[i-W]&&cur[i+W]) nxt[i]=1;
+      }
+      const tmp=cur; cur=nxt; nxt=tmp;
+    }
+    for(let it=0;it<r+2;it++){
+      nxt.set(cur);
+      for(let y=1;y<H-1;y++)for(let x=1;x<W-1;x++){
+        const i=y*W+x;
+        if(!cur[i]&&(cur[i-1]||cur[i+1]||cur[i-W]||cur[i+W])) nxt[i]=1;
+      }
+      const tmp=cur; cur=nxt; nxt=tmp;
+    }
+    for(let i=0;i<N;i++) if(cur[i]) m2[i]=0;
+  }
+
+  const covered=new Uint8Array(N);
+  const segs=[];
+  function median(arr){const s=arr.slice().sort((x,y)=>x-y);return s[s.length>>1];}
+
+  // 직교 벽: 열/행 런을 이어 붙여 사각형으로
+  function sweep(vertical){
+    const A=vertical?W:H, B=vertical?H:W;
+    const at=(a,b)=>vertical?(b*W+a):(a*W+b);
+    const comps=[]; let prevRuns=[];
+    for(let a=0;a<A;a++){
+      const runs=[]; let b0=-1;
+      for(let b=0;b<=B;b++){
+        const on=b<B&&m2[at(a,b)];
+        if(on&&b0<0) b0=b;
+        else if(!on&&b0>=0){ if(b-b0>=minLen) runs.push({b0,b1:b-1,comp:null}); b0=-1; }
+      }
+      for(const rn of runs){
+        for(const p of prevRuns){
+          const ov=Math.min(rn.b1,p.b1)-Math.max(rn.b0,p.b0);
+          if(ov>0.6*Math.min(rn.b1-rn.b0,p.b1-p.b0)){ rn.comp=p.comp; break; }
+        }
+        if(!rn.comp){ rn.comp={a0:a,a1:a,b0s:[],b1s:[]}; comps.push(rn.comp); }
+        rn.comp.a1=a; rn.comp.b0s.push(rn.b0); rn.comp.b1s.push(rn.b1);
+      }
+      prevRuns=runs;
+    }
+    for(const cm of comps){
+      const thick=cm.a1-cm.a0+1;
+      const b0=median(cm.b0s), b1=median(cm.b1s);
+      if(thick<2||thick>maxThick||b1-b0<minLen) continue;   // 1px 치수선·덩어리 배제
+      const ac=(cm.a0+cm.a1)/2;
+      segs.push(vertical?{x1:ac,y1:b0,x2:ac,y2:b1,t:thick}:{x1:b0,y1:ac,x2:b1,y2:ac,t:thick});
+      for(let a=cm.a0;a<=cm.a1;a++)for(let b=Math.round(b0);b<=Math.round(b1);b++){
+        const i=at(a,b); if(i>=0&&i<N) covered[i]=1;
+      }
+    }
+  }
+  sweep(true); sweep(false);
+
+  // 사선 벽: 남은 성분에 직선 적합. ㄱ자면 주축 중간에서 쪼개 재시도
+  function fitOrSplit(px,py,depth){
+    const n=px.length;
+    if(n<minLen*1.6) return;
+    let mx=0,my=0; for(let j=0;j<n;j++){mx+=px[j];my+=py[j];} mx/=n;my/=n;
+    let sxx=0,syy=0,sxy=0;
+    for(let j=0;j<n;j++){const ux=px[j]-mx,uy=py[j]-my;sxx+=ux*ux;syy+=uy*uy;sxy+=ux*uy;}
+    sxx/=n;syy/=n;sxy/=n;
+    const tr=sxx+syy, det=sxx*syy-sxy*sxy;
+    const l1=tr/2+Math.sqrt(Math.max(0,tr*tr/4-det)), l2=tr-l1;
+    let ex,ey; if(Math.abs(sxy)>1e-6){ex=l1-syy;ey=sxy;}else{ex=sxx>=syy?1:0;ey=sxx>=syy?0:1;}
+    const el=Math.hypot(ex,ey)||1; ex/=el;ey/=el;
+    let pmin=1e9,pmax=-1e9,rms=0;
+    for(let j=0;j<n;j++){
+      const ux=px[j]-mx,uy=py[j]-my, p=ux*ex+uy*ey, q=-ux*ey+uy*ex;
+      if(p<pmin)pmin=p; if(p>pmax)pmax=p; rms+=q*q;
+    }
+    rms=Math.sqrt(rms/n);
+    const len=pmax-pmin;
+    // 깊이 0은 엄격하게, 쪼갠 조각은 짧아도 허용 — 문 호가 현(chord) 폴리라인으로
+    // 근사되어 개구부를 «닫힌 문»처럼 막는다 (실내 인식이 새지 않는 핵심)
+    const minL=depth?minLen*0.7:minLen*1.4, maxR=depth?2.2:3.2;
+    const ok=l2>0&&l1/Math.max(l2,0.01)>=(depth?3:4)&&len>=minL&&rms<=maxR;
+    if(ok){ segs.push({x1:mx+ex*pmin,y1:my+ey*pmin,x2:mx+ex*pmax,y2:my+ey*pmax,t:Math.max(2,rms*2.5)}); return; }
+    if(depth>=4||n<minLen*1.6) return;                      // 낙서·글자는 여기서 소멸
+    const Ax=[],Ay=[],Bx=[],By=[];
+    for(let j=0;j<n;j++){
+      const p=(px[j]-mx)*ex+(py[j]-my)*ey;
+      if(p<0){Ax.push(px[j]);Ay.push(py[j]);}else{Bx.push(px[j]);By.push(py[j]);}
+    }
+    if(Ax.length>=minLen&&Bx.length>=minLen){ fitOrSplit(Ax,Ay,depth+1); fitOrSplit(Bx,By,depth+1); }
+  }
+  const seen=new Uint8Array(N), qx=new Int32Array(N), qy=new Int32Array(N);
+  for(let y=1;y<H-1;y++)for(let x=1;x<W-1;x++){
+    const i0=y*W+x;
+    if(!m2[i0]||covered[i0]||seen[i0]) continue;
+    let head=0,tail=0; qx[tail]=x;qy[tail]=y;tail++; seen[i0]=1;
+    const px=[],py=[];
+    while(head<tail){
+      const cx=qx[head],cy=qy[head];head++;
+      px.push(cx);py.push(cy);
+      for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){
+        const nx=cx+dx,ny=cy+dy;
+        if(nx<1||ny<1||nx>=W-1||ny>=H-1)continue;
+        const ni=ny*W+nx;
+        if(m2[ni]&&!covered[ni]&&!seen[ni]){seen[ni]=1;qx[tail]=nx;qy[tail]=ny;tail++;}
+      }
+    }
+    fitOrSplit(px,py,0);
+  }
+
+  // 외곽 폐곡선 — 창호는 파란 선, 발코니는 옅은 채움이라 «어두움» 마스크에 안 잡힌다.
+  // 그래서 외곽만은 별도 마스크로 뜬다: 흰 배경이 아닌 모든 픽셀(색 선·채움 포함)을
+  // 막으로 보고 이미지 테두리에서 확산 → 못 닿은 덩어리(=집)의 윤곽을 따라
+  // «창호(glass)» 벽을 두른다. 창선 구간은 물리적으로도 창(3 dB)이 맞고,
+  // 이미 잡힌 외벽과 겹쳐도 3 dB 오차뿐이다.
+  {
+    let cur=new Uint8Array(N), nxt=new Uint8Array(N);
+    for(let i=0;i<N;i++){
+      const r=d[i*4],gg=d[i*4+1],bl=d[i*4+2];
+      const sat=Math.max(r,gg,bl)-Math.min(r,gg,bl);
+      cur[i]=(gray[i]<228||sat>30)?1:0;                    // 흰 배경만 0
+    }
+    for(let x=0;x<W;x++){cur[x]=cur[W+x]=cur[(H-1)*W+x]=cur[(H-2)*W+x]=0;}
+    for(let y=0;y<H;y++){cur[y*W]=cur[y*W+1]=cur[y*W+W-1]=cur[y*W+W-2]=0;}
+    for(let it=0;it<2;it++){                               // 잔틈 2px 봉합
+      nxt.set(cur);
+      for(let y=1;y<H-1;y++)for(let x=1;x<W-1;x++){
+        const i=y*W+x;
+        if(!cur[i]&&(cur[i-1]||cur[i+1]||cur[i-W]||cur[i+W])) nxt[i]=1;
+      }
+      const tmp=cur; cur=nxt; nxt=tmp;
+    }
+    const out=new Uint8Array(N), st=new Int32Array(N); let sp=0;
+    const pushO=i=>{ if(!out[i]&&!cur[i]){out[i]=1;st[sp++]=i;} };
+    for(let x=0;x<W;x++){pushO(x);pushO((H-1)*W+x);}
+    for(let y=0;y<H;y++){pushO(y*W);pushO(y*W+W-1);}
+    while(sp){
+      const p=st[--sp], x=p%W, y=(p-x)/W;
+      if(x>0)pushO(p-1); if(x<W-1)pushO(p+1); if(y>0)pushO(p-W); if(y<H-1)pushO(p+W);
+    }
+    // 실내 덩어리(면적 5% 이상)의 바깥 윤곽을 Moore 추적으로 딴다
+    const isB=i=>{ // 덩어리 경계 픽셀인가
+      if(out[i]) return false;
+      const x=i%W,y=(i-x)/W;
+      return x===0||y===0||x===W-1||y===H-1||out[i-1]||out[i+1]||out[i-W]||out[i+W];
+    };
+    const blobSeen=new Uint8Array(N);
+    const D8=[[1,0],[1,1],[0,1],[-1,1],[-1,0],[-1,-1],[0,-1],[1,-1]];
+    for(let y0=1;y0<H-1;y0++)for(let x0=1;x0<W-1;x0++){
+      const s0=y0*W+x0;
+      if(out[s0]||blobSeen[s0]||!isB(s0)) continue;
+      // Moore 추적 — 면적 판정은 추적 후 bbox 로 어림
+      const path=[];
+      let cx=x0, cy=y0;
+      let dir=0; // 진입 방향: 위가 out 이 되도록 시작점을 잡았으므로 0(→)부터
+      let guard=N*2, sx=x0, sy=y0, closed=false;
+      while(guard-->0){
+        path.push([cx,cy]);
+        let found=false;
+        for(let k=0;k<8;k++){
+          const dd=(dir+6+k)%8;                 // 왼손 규칙: 직전 방향의 왼쪽부터 훑는다
+          const nx2=cx+D8[dd][0], ny2=cy+D8[dd][1];
+          if(nx2<0||ny2<0||nx2>=W||ny2>=H) continue;
+          const ni=ny2*W+nx2;
+          if(!out[ni]){ cx=nx2; cy=ny2; dir=dd; found=true; break; }
+        }
+        if(!found) break;
+        if(cx===sx&&cy===sy){ closed=true; break; }
+      }
+      for(const [px2,py2] of path) blobSeen[py2*W+px2]=1;
+      if(!closed||path.length<minLen*4) continue;
+      let pbx0=W,pby0=H,pbx1=0,pby1=0;
+      for(const [px2,py2] of path){pbx0=Math.min(pbx0,px2);pbx1=Math.max(pbx1,px2);pby0=Math.min(pby0,py2);pby1=Math.max(pby1,py2);}
+      if((pbx1-pbx0)*(pby1-pby0)<N*0.05) continue;          // 라벨 상자 등 작은 폐곡선 배제
+      // Douglas–Peucker 단순화 (폐곡선: 절반씩) — 꼭짓점이 넘치면 눈금을 키워 재시도
+      let simp=[];
+      for(let eps=3;eps<=24;eps*=2){
+        simp=[];
+        const dp=(i0,i1)=>{
+          const [ax,ay]=path[i0],[bx2,by2]=path[i1];
+          let mi=-1,md=0;
+          const dx2=bx2-ax,dy2=by2-ay,L2=Math.hypot(dx2,dy2)||1;
+          for(let j=i0+1;j<i1;j++){
+            const dd2=Math.abs((path[j][0]-ax)*dy2-(path[j][1]-ay)*dx2)/L2;
+            if(dd2>md){md=dd2;mi=j;}
+          }
+          if(md>eps&&mi>0){ dp(i0,mi); dp(mi,i1); }
+          else simp.push(path[i1]);
+        };
+        const half=path.length>>1;
+        simp.push(path[0]); dp(0,half); dp(half,path.length-1);
+        if(simp.length<=64) break;
+      }
+      for(let j=0;j<simp.length;j++){
+        const a=simp[j], b=simp[(j+1)%simp.length];
+        if(Math.hypot(b[0]-a[0],b[1]-a[1])<0.5) continue;  // 중복 꼭짓점만 배제 (틈을 만들지 않는다)
+        segs.push({x1:a[0],y1:a[1],x2:b[0],y2:b[1],t:3,kind:'glass'});
+      }
+    }
+  }
+
+  // 끝점 붙이기 — 모서리·T자 틈을 닫아 실내 인식(바깥 확산)이 새지 않게 한다.
+  // 문 개구부(~0.9 m)는 스냅 반경보다 훨씬 넓어서 닫히지 않는다.
+  {
+    const snap=Math.max(6,maxThick*0.9);
+    const eps=[];
+    for(const s of segs){ if(s.kind!=='glass') eps.push([s,'x1','y1'],[s,'x2','y2']); }   // 폐곡선은 건드리지 않는다
+    // ① 끝점끼리
+    for(let i=0;i<eps.length;i++)for(let j=i+1;j<eps.length;j++){
+      const [a,ax,ay]=eps[i],[b,bx,by]=eps[j];
+      if(a===b) continue;
+      const dx=a[ax]-b[bx], dy=a[ay]-b[by];
+      if(dx*dx+dy*dy<snap*snap){
+        const cx=(a[ax]+b[bx])/2, cy=(a[ay]+b[by])/2;
+        a[ax]=b[bx]=cx; a[ay]=b[by]=cy;
+      }
+    }
+    // ② 끝점 → 다른 벽 몸통 (T자 연결)
+    for(const [s,kx,ky] of eps){
+      let bd=snap,bx2=null,by2=null;
+      for(const o of segs){
+        if(o===s) continue;
+        const ox=o.x2-o.x1, oy=o.y2-o.y1, L2=ox*ox+oy*oy;
+        if(L2<1) continue;
+        let t=((s[kx]-o.x1)*ox+(s[ky]-o.y1)*oy)/L2;
+        if(t<0||t>1) continue;
+        const px2=o.x1+ox*t, py2=o.y1+oy*t;
+        const dd=Math.hypot(s[kx]-px2,s[ky]-py2);
+        if(dd>0.5&&dd<bd){bd=dd;bx2=px2;by2=py2;}
+      }
+      if(bx2!=null){s[kx]=bx2;s[ky]=by2;}
+    }
+  }
+
+  // 종류 추정: 외곽 근접+두꺼움 = 외벽, 두꺼움 = 내력벽, 얇음 = 경량벽
+  let bx0=W,by0=H,bx1=0,by1=0;
+  for(const s of segs){bx0=Math.min(bx0,s.x1,s.x2);bx1=Math.max(bx1,s.x1,s.x2);by0=Math.min(by0,s.y1,s.y2);by1=Math.max(by1,s.y1,s.y2);}
+  const margin=Math.max(bx1-bx0,by1-by0)*0.055;
+  const thickT=Math.max(4.5,W*0.0075);
+  for(const s of segs){
+    if(s.kind) continue;                                   // 외곽 폐곡선(glass)은 유지
+    const mxp=(s.x1+s.x2)/2, myp=(s.y1+s.y2)/2;
+    const dEdge=Math.min(mxp-bx0,bx1-mxp,myp-by0,by1-myp);
+    if(dEdge<margin&&s.t>=thickT*0.8) s.kind='ext';
+    else s.kind=s.t>=thickT?'bear':'light';
+  }
+  for(const s of segs){s.x1/=k;s.y1/=k;s.x2/=k;s.y2/=k;}
+  return segs;
+}
+
+// 인식 결과를 현재 축척으로 S.walls 에 싣는다. 성공 여부 반환
+function autoTraceWalls(c){
+  try{
+    let segs=traceWalls(c);
+    if(!segs||segs.length<8) return 0;                     // 도면이 아니거나 인식 실패
+    if(segs.length>150){                                   // 외곽 폐곡선(glass)은 지키고 나머지는 긴 순
+      const ring=segs.filter(s=>s.kind==='glass');
+      const rest=segs.filter(s=>s.kind!=='glass')
+        .sort((a,b)=>Math.hypot(b.x2-b.x1,b.y2-b.y1)-Math.hypot(a.x2-a.x1,a.y2-a.y1));
+      segs=ring.concat(rest.slice(0,Math.max(0,150-ring.length)));
+    }
+    S.walls=segs.map(s=>({x1:s.x1*S.mpp,y1:s.y1*S.mpp,x2:s.x2*S.mpp,y2:s.y2*S.mpp,t:s.kind}));
+    return segs.length;
+  }catch(e){ return 0; }
+}
+
+/* ============================================================
    이미지 · 저장
    ============================================================ */
 function loadPlan(file){
@@ -2244,8 +2592,16 @@ function applyBg(c){
     S.bg={url, w:c.width, h:c.height, img:im2};
     S.mpp = 10/c.width;                 // 임시 축척: 가로 10 m 가정
     S.rooms=[];
+    if(S.name&&S.name.startsWith('샘플')){   // 샘플 위에 올렸다면 샘플의 기기·공유기는 정리
+      S.name='내 현장'; S.devs=[]; sel=null; ghost=null;
+      S.aps=S.aps.slice(0,1);
+      if(S.aps[0]){ S.aps[0].x=c.width*S.mpp/2; S.aps[0].y=c.height*S.mpp/2; }
+    }
+    const n=autoTraceWalls(c);          // 벽 자동 인식 — 문·개구부는 끊긴 채움으로 저절로 뚫린다
     fit(); commit();
-    toast('축척 맞추기로 실제 치수를 한 번 지정해 주세요');
+    toast(n
+      ? `벽 ${n}개를 자동 인식했습니다 — 틀린 곳만 벽·지우개 모드로 고치고, 축척을 맞춰 주세요`
+      : '벽을 자동 인식하지 못한 도면입니다 — 벽 모드에서 직접 그리고, 축척을 맞춰 주세요');
     mode='view'; renderMode();
   };
   im2.src=url;
