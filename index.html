@@ -149,6 +149,22 @@ button{cursor:pointer}
   max-width:calc(100% - 52px);
 }
 
+/* ---------- guide (다음 할 일) ---------- */
+.guide{padding:11px 13px 12px;flex:none}
+.guide .gtitle{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ink3);margin-bottom:8px}
+.gstep{display:flex;align-items:flex-start;gap:8px;padding:5px 0;border:0;background:none;width:100%;text-align:left;color:var(--ink2);font-size:12.5px;cursor:pointer}
+.gstep .gn{
+  flex:none;width:18px;height:18px;border-radius:50%;display:grid;place-items:center;
+  font-size:10.5px;font-weight:700;border:1.5px solid var(--line2);color:var(--ink3);margin-top:1px;
+}
+.gstep.done .gn{background:var(--good);border-color:var(--good);color:#fff}
+.gstep.cur{color:var(--ink);font-weight:600}
+.gstep.cur .gn{border-color:var(--accent);color:var(--accent)}
+.gstep.todo{opacity:.55}
+.gdesc{font-size:11.5px;color:var(--ink2);font-weight:400;line-height:1.5;margin:2px 0 4px 26px}
+.gact{margin:0 0 4px 26px}
+.gdone{font-size:12px;color:var(--ink2);line-height:1.55}
+
 /* ---------- mode tabs ---------- */
 .modes{display:grid;grid-template-columns:repeat(6,1fr);gap:4px;background:var(--surface2);border:1px solid var(--line);border-radius:11px;padding:4px;flex:none}
 .modes button{
@@ -324,6 +340,7 @@ details.adv2 .mpanel{padding-top:0}
 
 <div class="app">
   <aside class="colL">
+    <div class="panel guide" id="guide"></div>
     <nav class="modes" id="modes" aria-label="편집 모드"></nav>
     <div class="panel tools"><div class="mpanel" id="mpanel"></div></div>
   </aside>
@@ -548,6 +565,7 @@ function sampleState(){
   return {
     name:'샘플 · 84㎡ 3베이',
     bg:null, mpp:1, band:'2.4', n:2.2, fade:3, view:'signal', covTarget:-70, covTargetZ:-80, net:'wifi', custom:{}, simple:true,
+    scaled:true, apTouched:true,   // 샘플·기존 저장본은 안내를 건너뛴다 (hydrate 가 이 값을 기본으로 쓴다)
     rooms:[
       ['침실 3',0,0,3.0,4.6],['거실',3.0,0,7.4,5.8],['안방',7.4,0,11.4,4.2],
       ['드레스룸',7.4,4.2,8.8,6.2],['안방 욕실',8.8,4.2,11.4,6.2],
@@ -1189,7 +1207,9 @@ cv.addEventListener('pointermove',e=>{
   }
   if(dragTarget){
     const s=(mode==='wall')?snap(p):{x:mx(p.x),y:my(p.y)};
-    dragTarget.o.x=s.x; dragTarget.o.y=s.y; ghost=null; heatDirty=true; draw(); return;
+    dragTarget.o.x=s.x; dragTarget.o.y=s.y; ghost=null; heatDirty=true;
+    if(dragTarget.t==='ap') S.apTouched=true;              // 공유기를 끌어 놓는 것도 «자리 정함»
+    draw(); return;
   }
   if(draft){
     let s=(mode==='wall')?snap(p):{x:mx(p.x),y:my(p.y)};
@@ -1238,6 +1258,7 @@ function tap(p){
   if(mode==='ap'){
     const id='ap'+Date.now().toString(36);
     const pr=AP_PRESETS.kt6;
+    S.apTouched=true;
     S.aps.push({id,name:S.aps.length?'중계기 '+S.aps.length:pr.ko,x:world.x,y:world.y,
                 preset:S.aps.length?'ext5g':'kt6',tx:S.band==='5'?pr.p5:pr.p24,gain:pr.gain,
                 enc:0,wired:S.aps.length===0});
@@ -1324,7 +1345,7 @@ function askScale(measured){
     const real=parseFloat(document.getElementById('scIn').value);
     if(!(real>0.02)) return;
     const f=real/measured;
-    S.mpp*=f;
+    S.mpp*=f; S.scaled=true;
     const sc=o=>{o.x*=f;o.y*=f;};
     for(const w of S.walls){w.x1*=f;w.y1*=f;w.x2*=f;w.y2*=f;}
     for(const r of S.rooms){r[1]*=f;r[2]*=f;r[3]*=f;r[4]*=f;}
@@ -1861,7 +1882,49 @@ function applySimple(){
   const b=document.getElementById('btnModeTxt');
   if(b) b.textContent = S.simple?'간단':'상세';
 }
-function renderAll(){ syncProd(); applySimple(); draw(); paintNetTabs(); renderList(); renderAdvice(); renderBom(); renderMode(); }
+function renderAll(){ syncProd(); applySimple(); draw(); paintNetTabs(); renderList(); renderAdvice(); renderBom(); renderMode(); renderGuide(); }
+
+/* 다음 할 일 — 상태를 보고 지금 해야 할 «한 가지»를 짚어준다.
+   불친절하다는 피드백에서 나온 것: 도면을 올린 뒤 뭘 해야 하는지 아무도 안 알려줬다. */
+function renderGuide(){
+  const el=document.getElementById('guide'); if(!el) return;
+  const hasPlan=!!S.bg||S.walls.length>0;
+  const steps=[
+    {ko:'도면 올리기',  done:hasPlan,
+     desc:'아파트 도면 사진(JPG·PNG·PDF)을 올리면 벽이 자동으로 그려집니다.',
+     act:'도면 올리기', go(){ mode='view'; renderMode(); const f=document.getElementById('fileIn'); if(f) f.click(); }},
+    {ko:'축척 맞추기',  done:S.scaled,
+     desc:'길이를 아는 곳에 선을 하나 그으세요 — 현관문 폭 0.9 m가 제일 쉽습니다. 면적·거리가 실제 치수로 맞춰집니다.',
+     act:'선 긋기 시작', go(){ mode='scale'; renderMode(); document.getElementById('hint').textContent=HINTS.scale; draw(); }},
+    {ko:'공유기 자리',  done:!!(S.apTouched&&S.aps.length),
+     desc:'공유기가 있는(있을) 자리를 도면에서 누르거나 끌어다 놓으세요. 보통 거실 TV장 또는 현관 단자함입니다.',
+     act:'공유기 놓기', go(){ mode='ap'; renderMode(); draw(); }},
+    {ko:'기기 배치',    done:S.devs.length>0,
+     desc:'설치할 IoT 제품을 골라 자리마다 찍으세요. 자리별로 신호가 닿는지 바로 계산됩니다.',
+     act:'기기 놓기', go(){ mode='dev'; renderMode(); draw(); }},
+  ];
+  const cur=steps.findIndex(s=>!s.done);
+  let html='<div class="gtitle">'+(cur<0?'설계 완료':'다음 할 일')+'</div>';
+  steps.forEach((s,i)=>{
+    const cls=s.done?'done':(i===cur?'cur':'todo');
+    html+=`<button class="gstep ${cls}" data-g="${i}">
+      <span class="gn">${s.done?'✓':i+1}</span><span>${s.ko}</span></button>`;
+    if(i===cur) html+=`<div class="gdesc">${s.desc}</div><div class="gact"><button class="actbtn" data-ga="${i}">${s.act}</button></div>`;
+  });
+  if(cur<0){
+    const cs=coverageStats(null,'wifi');
+    const bad=S.devs.filter(d=>['warn','risk','bad'].includes(devStatus(linkOf(d).eff,PROD[d.k].req).key)).length;
+    html+=`<div class="gdesc gdone" style="margin-left:0">${
+      bad?`<b style="color:var(--bad)">신호가 약한 기기가 ${bad}대</b> 있습니다. 오른쪽 목록에서 확인하세요.`
+          :'모든 기기에 신호가 닿습니다.'}
+      ${cs.pct<97?' 빨간 <b>미달 구역</b>이 남으면 자동 설계로 채울 수 있습니다.':''}</div>
+      <div class="gact" style="margin-left:0"><button class="actbtn" id="gAuto">공유기 대수 자동 설계</button></div>`;
+  }
+  el.innerHTML=html;
+  el.querySelectorAll('[data-g]').forEach(b=>b.onclick=()=>steps[+b.dataset.g].go());
+  el.querySelectorAll('[data-ga]').forEach(b=>b.onclick=e=>{e.stopPropagation();steps[+b.dataset.ga].go();});
+  const ga=document.getElementById('gAuto'); if(ga) ga.onclick=()=>openAutoDesign();
+}
 
 function renderList(){
   const el=document.getElementById('devlist');
@@ -2597,6 +2660,7 @@ function applyBg(c){
       S.aps=S.aps.slice(0,1);
       if(S.aps[0]){ S.aps[0].x=c.width*S.mpp/2; S.aps[0].y=c.height*S.mpp/2; }
     }
+    S.scaled=false; S.apTouched=false;       // 새 도면 — 축척·공유기 위치를 단계 안내가 다시 챙긴다
     const n=autoTraceWalls(c);          // 벽 자동 인식 — 문·개구부는 끊긴 채움으로 저절로 뚫린다
     fit(); commit();
     toast(n
@@ -2610,6 +2674,7 @@ function applyBg(c){
 function serialize(){
   return {
     name:S.name, mpp:S.mpp, band:S.band, n:S.n, fade:S.fade,
+    scaled:S.scaled, apTouched:S.apTouched,
     rooms:S.rooms, walls:S.walls, aps:S.aps, devs:S.devs,
     bg:S.bg?{w:S.bg.w,h:S.bg.h}:null,
   };
