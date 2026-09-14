@@ -3,569 +3,180 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>WiFi 전파 시뮬레이터 | 칸트라이팅 KANT</title>
-<meta name="description" content="아파트 도면에 벽과 공유기를 올리면 IoT 기기 자리마다 WiFi·Zigbee 신호가 닿는지 시공 전에 확인합니다. 필요한 공유기 대수까지 계산합니다.">
-<meta property="og:title" content="WiFi 전파 시뮬레이터 | 칸트라이팅 KANT">
-<meta property="og:description" content="IoT 시공 전에 신호가 안 닿는 자리를 도면에서 미리 찾아냅니다.">
-<meta property="og:type" content="website">
-<style>:root{color-scheme:light}html,body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<title>WiFi 사각지대 체크 | 칸트라이팅 KANT</title>
+<meta name="description" content="아파트 도면을 올리면 벽을 자동 분석해, 공유기 위치에서 WiFi 신호가 안 닿는 공간을 시공 전에 보여줍니다.">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap">
 <style>
 :root{
-  --bg:#EFF0F5; --surface:#FFFFFF; --surface2:#E7E8F0; --sunk:#F7F8FB;
-  --line:#D2D4E1; --line2:#BFC2D3;
-  --ink:#171923; --ink2:#565A70; --ink3:#8A8EA4;
-  --accent:#3D46D9; --accent2:#5A63E8; --accentSoft:#E5E7FB;
-  --good:#0F8A5F; --ok:#5C9A28; --warn:#B8830B; --risk:#D2601F; --bad:#C22B4C;
-  --goodF:#0F8A5F; --okF:#5C9A28; --warnF:#B8830B; --riskF:#D2601F; --badF:#C22B4C;
-  --plan:#FBFBFD; --room:#F1F2F7; --roomInk:#9599AD;
-  --shadow:0 1px 2px rgba(20,22,40,.06),0 6px 20px rgba(20,22,40,.07);
-  --r:10px;
-}
-@media (prefers-color-scheme:dark){
-  :root:not([data-theme="light"]){
-    --bg:#0E0F15; --surface:#171923; --surface2:#212433; --sunk:#12141C;
-    --line:#2C3042; --line2:#3A3F55;
-    --ink:#ECEEF6; --ink2:#A3A8BF; --ink3:#727892;
-    --accent:#7F88FF; --accent2:#9AA1FF; --accentSoft:#212545;
-    --good:#2ECF8E; --ok:#93D157; --warn:#EFC04E; --risk:#FF8E56; --bad:#FF6C87;
-    --plan:#0B0C12; --room:#161822; --roomInk:#6C7189;
-    --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.35);
-  }
-}
-:root[data-theme="dark"]{
-  --bg:#0E0F15; --surface:#171923; --surface2:#212433; --sunk:#12141C;
-  --line:#2C3042; --line2:#3A3F55;
+  --bg:#0E0F15; --surface:#171923; --line:#2C3042; --line2:#3A3F55;
   --ink:#ECEEF6; --ink2:#A3A8BF; --ink3:#727892;
-  --accent:#7F88FF; --accent2:#9AA1FF; --accentSoft:#212545;
-  --good:#2ECF8E; --ok:#93D157; --warn:#EFC04E; --risk:#FF8E56; --bad:#FF6C87;
-  --plan:#0B0C12; --room:#161822; --roomInk:#6C7189;
-  --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.35);
+  --accent:#7F88FF; --accentSoft:#212545;
+  --good:#2ECF8E; --warn:#EFC04E; --bad:#FF6C87;
 }
-
 *{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{height:100%}
 body{
   margin:0;background:var(--bg);color:var(--ink);
-  font-family:"IBM Plex Sans KR",-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+  font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;
   font-size:14px;line-height:1.55;-webkit-text-size-adjust:100%;
+  display:flex;flex-direction:column;overflow:hidden;
 }
-body.simple .advonly{display:none!important}
-.mono{font-family:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;font-variant-numeric:tabular-nums}
-button,select,input{font:inherit;color:inherit}
-button{cursor:pointer}
-:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:6px}
-
-/* ---------- top bar ---------- */
-.top{
-  position:sticky;top:0;z-index:30;background:var(--surface);
-  border-bottom:1px solid var(--line);
-  display:flex;align-items:center;gap:10px;padding:9px 12px;
+header{
+  flex:none;display:flex;align-items:center;gap:9px;padding:9px 14px;
+  background:var(--surface);border-bottom:1px solid var(--line);
 }
-.brand{display:flex;align-items:center;gap:9px;min-width:0}
-.mark{
-  width:26px;height:26px;flex:none;border-radius:7px;background:var(--accent);
-  display:grid;place-items:center;color:#fff;
-}
-.mark svg{display:block}
-.brandtxt{min-width:0}
-.brandtxt b{display:block;font-size:13px;font-weight:600;letter-spacing:-.01em;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.brandtxt span{display:block;font-size:10.5px;color:var(--ink3);letter-spacing:.08em;text-transform:uppercase;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-@media(max-width:600px){.top .tbtn svg{display:none}}
-.top .sp{flex:1}
+.mark{width:26px;height:26px;flex:none;border-radius:7px;background:var(--accent);display:grid;place-items:center;color:#fff}
+.brand b{display:block;font-size:13px;font-weight:600;line-height:1.2}
+.brand span{display:block;font-size:10.5px;color:var(--ink3);letter-spacing:.07em;line-height:1.3}
+header .sp{flex:1}
 .tbtn{
-  background:var(--surface2);border:1px solid var(--line);border-radius:8px;
-  padding:6px 11px;font-size:12.5px;font-weight:500;color:var(--ink);white-space:nowrap;
-  display:inline-flex;align-items:center;gap:6px;
+  background:transparent;border:1px solid var(--line);border-radius:8px;color:var(--ink2);
+  padding:6px 11px;font:inherit;font-size:12.5px;cursor:pointer;white-space:nowrap;
 }
-.tbtn svg{flex:none;opacity:.8}
-.tbtn:hover{border-color:var(--line2)}
-.tbtn.pri{background:var(--accent);border-color:var(--accent);color:#fff}
-.tbtn.pri:hover{background:var(--accent2)}
+.tbtn:hover{border-color:var(--line2);color:var(--ink)}
 
-/* ---------- shell ----------
-   좁은 화면: 세로 스택(도면 먼저), 페이지 스크롤.
-   넓은 화면(아임웹 PC 임베드): 도구 | 도면 | 진단 3단, 한 화면 고정(페이지 스크롤 없음).
-   단 안에서 넘치는 목록만 자체 스크롤한다. */
-.app{display:flex;flex-direction:column;gap:12px;padding:12px 12px 20px;max-width:1500px;margin:0 auto;width:100%}
-.colL,.colR{display:flex;flex-direction:column;gap:10px;min-width:0}
-.stage{order:-1}
-@media(min-width:980px) and (min-height:520px){
-  body{height:100dvh;overflow:hidden;display:flex;flex-direction:column}
-  .top{flex:none}
-  .app{flex:1;min-height:0;display:grid;grid-template-columns:284px minmax(0,1fr) 336px;gap:12px;padding:12px 14px;max-width:none;margin:0;width:auto}
-  .stage{order:0;position:relative;min-height:0}
-  .colL,.colR{min-height:0;overflow:hidden}
-  .colL .panel.tools{flex:0 1 auto;min-height:0;overflow-y:auto}
-  .colR .panel.devs{flex:1 1 auto;min-height:110px;display:flex;flex-direction:column;overflow:hidden}
-  .colR .panel.devs #devlist{overflow-y:auto;min-height:0;flex:1}
-  .colR .panel.judge{flex:0 0 auto;max-height:38%;overflow-y:auto}
-  .colR .panel.bomp{flex:0 0 auto;max-height:30%;overflow-y:auto}
-  .app *{scrollbar-width:thin;scrollbar-color:var(--line2) transparent}
-  .app ::-webkit-scrollbar{width:8px;height:8px}
-  .app ::-webkit-scrollbar-thumb{background:var(--line2);border-radius:4px}
-  .app ::-webkit-scrollbar-track{background:transparent}
+/* 단계 배너 — 화면의 유일한 안내. 지금 할 «한 가지»만 말한다 */
+.stepbar{
+  flex:none;display:flex;align-items:center;flex-wrap:wrap;gap:8px 12px;
+  padding:11px 14px;background:var(--surface);border-bottom:1px solid var(--line);min-height:54px;
 }
-
-.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow)}
-.phead{display:flex;align-items:center;gap:7px;padding:10px 13px 8px;border-bottom:1px solid var(--line)}
-.phead h2{margin:0;font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ink2);display:inline-flex;align-items:center;gap:6px}
-.phead h2 svg{flex:none;color:var(--ink3)}
-.phead .sub{font-size:11.5px;color:var(--ink3);margin-left:auto}
-
-/* ---------- canvas ---------- */
-.stage{display:flex;flex-direction:column;gap:10px}
-.cwrap{
-  position:relative;background:var(--plan);border:1px solid var(--line);border-radius:var(--r);
-  overflow:hidden;box-shadow:var(--shadow);touch-action:none;
+.stepbar .sn{
+  flex:none;width:22px;height:22px;border-radius:50%;display:grid;place-items:center;
+  background:var(--accent);color:#fff;font-size:12px;font-weight:700;
 }
-#cv{display:block;width:100%;height:min(58vh,520px);min-height:340px}
-@media(min-width:980px) and (min-height:520px){
-  .cwrap{flex:1;min-height:0}
-  #cv{height:100%;min-height:0}
+.stepbar .sn.ok{background:var(--good)}
+.stepbar .sn.bad{background:var(--bad)}
+.stepbar .st{font-size:14px;font-weight:600}
+.stepbar .sd{font-size:12px;color:var(--ink2);width:100%;padding-left:34px;margin-top:-4px}
+@media(min-width:760px){.stepbar .sd{width:auto;padding-left:0;margin-top:0}}
+.stepbar .grow{flex:1}
+.abtn{
+  background:var(--accent);border:1px solid var(--accent);border-radius:9px;color:#fff;
+  padding:8px 14px;font:inherit;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;
 }
-.readout{
-  position:absolute;left:9px;top:9px;display:flex;gap:6px;flex-wrap:wrap;pointer-events:none;
-}
+.abtn:hover{filter:brightness(1.1)}
+.abtn.ghost{background:transparent;color:var(--accent)}
 .chip{
-  background:color-mix(in srgb,var(--surface) 88%,transparent);
-  border:1px solid var(--line);border-radius:7px;padding:3px 8px;
-  font-size:11px;color:var(--ink2);backdrop-filter:blur(6px);
+  background:var(--accentSoft);border:1px solid var(--line2);border-radius:9px;color:var(--ink);
+  padding:7px 13px;font:inherit;font-size:13px;cursor:pointer;white-space:nowrap;
 }
-.chip b{color:var(--ink);font-weight:600}
-.zoombar{position:absolute;right:9px;bottom:9px;display:flex;flex-direction:column;gap:5px}
-.zoombar button{
-  width:31px;height:31px;border-radius:8px;border:1px solid var(--line);
-  background:color-mix(in srgb,var(--surface) 90%,transparent);color:var(--ink2);
-  font-size:15px;line-height:1;display:grid;place-items:center;backdrop-filter:blur(6px);
-}
-.hintbar{
-  position:absolute;left:9px;right:9px;bottom:9px;pointer-events:none;
-  font-size:11.5px;color:var(--ink2);
-  background:color-mix(in srgb,var(--surface) 90%,transparent);
-  border:1px solid var(--line);border-radius:8px;padding:5px 9px;backdrop-filter:blur(6px);
-  max-width:calc(100% - 52px);
-}
+.chip:hover{border-color:var(--accent)}
 
-/* ---------- guide (다음 할 일) ---------- */
-.guide{padding:11px 13px 12px;flex:none}
-.guide .gtitle{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ink3);margin-bottom:8px}
-.gstep{display:flex;align-items:flex-start;gap:8px;padding:5px 0;border:0;background:none;width:100%;text-align:left;color:var(--ink2);font-size:12.5px;cursor:pointer}
-.gstep .gn{
-  flex:none;width:18px;height:18px;border-radius:50%;display:grid;place-items:center;
-  font-size:10.5px;font-weight:700;border:1.5px solid var(--line2);color:var(--ink3);margin-top:1px;
+main{flex:1;min-height:0;position:relative;background:#10111a}
+canvas{display:block;width:100%;height:100%;touch-action:none}
+.empty{
+  position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:12px;color:var(--ink3);pointer-events:none;text-align:center;padding:20px;
 }
-.gstep.done .gn{background:var(--good);border-color:var(--good);color:#fff}
-.gstep.cur{color:var(--ink);font-weight:600}
-.gstep.cur .gn{border-color:var(--accent);color:var(--accent)}
-.gstep.todo{opacity:.55}
-.gdesc{font-size:11.5px;color:var(--ink2);font-weight:400;line-height:1.5;margin:2px 0 4px 26px}
-.gact{margin:0 0 4px 26px}
-.gdone{font-size:12px;color:var(--ink2);line-height:1.55}
-
-/* ---------- mode tabs ---------- */
-.modes{display:grid;grid-template-columns:repeat(6,1fr);gap:4px;background:var(--surface2);border:1px solid var(--line);border-radius:11px;padding:4px;flex:none}
-.modes button{
-  border:0;background:transparent;border-radius:8px;padding:7px 2px;
-  font-size:11.5px;font-weight:500;color:var(--ink2);display:flex;flex-direction:column;align-items:center;gap:3px;
+.empty svg{opacity:.5}
+.empty b{color:var(--ink2);font-size:15px;font-weight:600}
+.empty span{font-size:12.5px;max-width:420px}
+.hint{
+  position:absolute;left:10px;bottom:10px;right:56px;pointer-events:none;
+  font-size:12px;color:var(--ink2);background:rgba(23,25,35,.88);border:1px solid var(--line);
+  border-radius:8px;padding:6px 10px;backdrop-filter:blur(6px);max-width:520px;
 }
-.modes button svg{opacity:.75;flex:none}
-.modes button[aria-pressed="true"]{background:var(--surface);color:var(--accent);box-shadow:0 1px 3px rgba(20,22,40,.12)}
-.modes button[aria-pressed="true"] svg{opacity:1}
-@media(min-width:980px) and (min-height:520px){
-  .modes{grid-template-columns:repeat(3,1fr)}
-  .modes button{flex-direction:row;justify-content:flex-start;gap:7px;padding:8px 10px;font-size:12px}
+.zoom{position:absolute;right:10px;bottom:10px;display:flex;flex-direction:column;gap:5px}
+.zoom button{
+  width:32px;height:32px;border-radius:8px;border:1px solid var(--line);cursor:pointer;
+  background:rgba(23,25,35,.88);color:var(--ink2);display:grid;place-items:center;backdrop-filter:blur(6px);
 }
-
-/* ---------- mode panel ---------- */
-.mpanel{padding:11px 13px;display:flex;flex-direction:column;gap:10px}
-.row{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
-.lbl{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink3);font-weight:600;width:100%}
-.swatchbtn{
-  display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--sunk);
-  border-radius:8px;padding:5px 9px;font-size:12px;color:var(--ink2);
+.legend{
+  position:absolute;left:10px;top:10px;display:flex;gap:12px;pointer-events:none;
+  font-size:11.5px;color:var(--ink2);background:rgba(23,25,35,.88);border:1px solid var(--line);
+  border-radius:8px;padding:5px 11px;backdrop-filter:blur(6px);
 }
-.swatchbtn[aria-pressed="true"]{border-color:var(--accent);background:var(--accentSoft);color:var(--ink);font-weight:500}
-.swatchbtn i{width:14px;height:4px;border-radius:2px;flex:none;display:block}
-.swatchbtn em{font-style:normal;font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--ink3)}
-.field{display:flex;flex-direction:column;gap:4px;flex:1;min-width:120px}
-.field label{font-size:11px;color:var(--ink3);letter-spacing:.04em}
-.field select,.field input[type=number],.field input[type=text]{
-  background:var(--sunk);border:1px solid var(--line);border-radius:8px;padding:7px 9px;font-size:13px;width:100%;
+.legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+footer{
+  flex:none;text-align:center;font-size:11px;color:var(--ink3);
+  padding:7px 12px;background:var(--surface);border-top:1px solid var(--line);white-space:nowrap;overflow:hidden;
 }
-input[type=range]{width:100%;accent-color:var(--accent)}
-.note{font-size:11.5px;color:var(--ink3);line-height:1.5}
-
-/* ---------- legend ---------- */
-.vtabs{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;background:var(--surface2);border:1px solid var(--line);border-radius:9px;padding:3px;margin:0}
-.vtabs button{border:0;background:transparent;border-radius:7px;padding:6px 8px;font-size:11px;font-weight:500;color:var(--ink2);white-space:nowrap}
-.vtabs button[aria-pressed="true"]{background:var(--surface);color:var(--accent);box-shadow:0 1px 3px rgba(20,22,40,.12)}
-/* 히트맵 전환(통신망·표시) — 좁은 화면에선 도면 아래 한 줄, 넓은 화면에선 도면 위 오버레이 */
-.hud{display:flex;gap:6px;flex-wrap:wrap}
-@media(min-width:980px) and (min-height:520px){
-  .hud{position:absolute;top:9px;right:9px;z-index:5;flex-direction:column;align-items:flex-end;flex-wrap:nowrap}
-  .hud .vtabs{background:color-mix(in srgb,var(--surface2) 86%,transparent);backdrop-filter:blur(6px);box-shadow:var(--shadow)}
+footer b{color:var(--ink2)}
+footer a{color:var(--accent);text-decoration:none;font-weight:600}
+input[type=file]{display:none}
+.toast{
+  position:absolute;left:50%;bottom:52px;transform:translateX(-50%);
+  background:var(--surface);border:1px solid var(--line2);border-radius:10px;color:var(--ink);
+  padding:9px 15px;font-size:13px;box-shadow:0 8px 30px rgba(0,0,0,.4);
+  opacity:0;transition:opacity .25s;pointer-events:none;white-space:nowrap;z-index:20;
 }
-.bomrow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;padding:7px 13px;border-bottom:1px solid var(--line);font-size:12.5px;align-items:baseline}
-.bomrow:last-child{border-bottom:0}
-.bomrow .k{color:var(--ink2);overflow:hidden;text-overflow:ellipsis}
-.bomrow .k small{display:block;color:var(--ink3);font-size:11px}
-.bomrow .v{font-family:"IBM Plex Mono",monospace;font-weight:600;white-space:nowrap}
-.bomhead{padding:9px 13px 5px;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink3);font-weight:600;background:var(--sunk);border-bottom:1px solid var(--line)}
-.apchips{display:flex;gap:5px;flex-wrap:wrap;width:100%}
-.apchip{border:1px solid var(--line);background:var(--sunk);border-radius:8px;padding:5px 9px;font-size:11.5px;color:var(--ink2)}
-.apchip[aria-pressed="true"]{border-color:var(--accent);background:var(--accentSoft);color:var(--ink);font-weight:500}
-.legend{padding:11px 13px 13px}
-.lgpanel{position:relative;flex:none}
-.lgnote{margin:8px 0 0}
-#lgBandNote{display:none;position:absolute;top:9px;right:12px;font-size:10.5px;color:var(--ink3)}
-@media(min-width:980px) and (min-height:520px){#lgBandNote{display:block}}
-@media(min-width:980px) and (min-height:520px){
-  .legend{display:grid;grid-template-columns:236px minmax(0,1fr);gap:0 16px;padding:9px 13px 10px}
-  .legend>.lgbar,.legend>.lgticks,.legend>.lgnames{grid-column:1}
-  .legend .lgnote{grid-column:2;grid-row:1/4;align-self:center;margin:0;padding-right:52px;font-size:11px}
-}
-.lgbar{height:12px;border-radius:3px;display:flex;overflow:hidden;border:1px solid var(--line)}
-.lgbar span{flex:1}
-.lgticks{display:flex;margin-top:5px}
-.lgticks span{flex:1;text-align:center;font-size:10px;color:var(--ink3);font-family:"IBM Plex Mono",monospace}
-.lgnames{display:flex;margin-top:1px}
-.lgnames span{flex:1;text-align:center;font-size:10.5px;color:var(--ink2)}
-
-/* ---------- summary ---------- */
-.sumgrid{display:grid;grid-template-columns:repeat(2,1fr);border-top:1px solid var(--line)}
-@media(min-width:520px){.sumgrid{grid-template-columns:repeat(4,1fr)}}
-.sumgrid div{border-bottom:1px solid var(--line)}
-@media(min-width:520px){.sumgrid div{border-bottom:0}}
-.sumgrid div{padding:11px 13px;border-right:1px solid var(--line)}
-.sumgrid div:last-child{border-right:0}
-.sumgrid .k{font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--ink3)}
-.sumgrid .v{font-family:"IBM Plex Mono",monospace;font-size:20px;font-weight:600;line-height:1.25;letter-spacing:-.02em}
-.sumgrid .u{font-size:11px;color:var(--ink3);font-weight:400}
-@media(min-width:980px) and (min-height:520px){
-  .colR .sumgrid{grid-template-columns:repeat(2,1fr)}
-  .colR .sumgrid div{padding:9px 13px;border-right:1px solid var(--line);border-bottom:1px solid var(--line)}
-  .colR .sumgrid div:nth-child(2n){border-right:0}
-  .colR .sumgrid div:nth-child(n+3){border-bottom:0}
-  .colR .sumgrid .v{font-size:18px}
-}
-
-/* ---------- device list ---------- */
-.dev{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:10px;align-items:center;
-  padding:9px 13px;border-bottom:1px solid var(--line);width:100%;text-align:left;background:transparent;border-left:0;border-right:0;border-top:0}
-.dev:last-child{border-bottom:0}
-.dev:hover{background:var(--sunk)}
-.dev.sel{background:var(--accentSoft)}
-.dev .sev{width:4px;align-self:stretch;border-radius:2px;min-height:30px}
-.dev .nm{font-size:13px;font-weight:500;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.dev .meta{font-size:11px;color:var(--ink3);line-height:1.4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.dev .rd{text-align:right;flex:none}
-.dev .rd b{display:block;font-family:"IBM Plex Mono",monospace;font-size:15px;font-weight:600;letter-spacing:-.02em}
-.dev .rd .big{font-size:12.5px;font-weight:600}
-.dev .rd span{display:block;font-size:10.5px;font-weight:500}
-.emptylist{padding:22px 13px;text-align:center;color:var(--ink3);font-size:12.5px}
-
-/* ---------- advice ---------- */
-.advice{padding:12px 13px;display:flex;flex-direction:column;gap:9px}
-.adv{display:flex;gap:9px;align-items:flex-start;font-size:12.5px;line-height:1.55;color:var(--ink2)}
-.adv .dot{width:6px;height:6px;border-radius:50%;margin-top:6px;flex:none;background:var(--ink3)}
-.adv b{color:var(--ink);font-weight:600}
-.adv .mono{color:var(--ink)}
-.actbtn{
-  border:1px solid var(--accent);background:var(--accentSoft);color:var(--accent);
-  border-radius:8px;padding:7px 11px;font-size:12.5px;font-weight:600;align-self:flex-start;
-}
-.actbtn:hover{background:var(--accent);color:#fff}
-
-/* ---------- sheet ---------- */
-.kfoot{display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:4px 12px;
-  padding:12px 14px 18px;font-size:11px;color:var(--ink3);border-top:1px solid var(--line);
-  margin:0;text-align:center}
-.kfoot b{color:var(--ink2);font-weight:600;letter-spacing:.02em}
-@media(min-width:980px) and (min-height:520px){
-  .kfoot{flex:none;padding:6px 12px 7px;background:var(--surface);flex-wrap:nowrap;white-space:nowrap;overflow:hidden}
-}
-.kfoot a{color:var(--accent);text-decoration:none;font-weight:600}
-.kfoot a:hover{text-decoration:underline}
-.scrim{position:fixed;inset:0;background:rgba(10,11,18,.5);z-index:50;display:none}
-.scrim.on{display:block}
-.sheet{
-  position:fixed;z-index:51;left:50%;top:50%;transform:translate(-50%,-50%);
-  width:min(440px,calc(100vw - 28px));max-height:82vh;overflow:auto;
-  background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:0 20px 60px rgba(10,11,25,.35);
-  display:none;
-}
-.sheet.on{display:block}
-.sheet h3{margin:0;padding:14px 15px 11px;font-size:14px;font-weight:600;border-bottom:1px solid var(--line)}
-.sbody{padding:13px 15px 15px;display:flex;flex-direction:column;gap:11px}
-.sitem{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:8px;align-items:center;padding:9px 10px;border:1px solid var(--line);border-radius:9px;background:var(--sunk)}
-.sitem .t{font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.sitem .d{font-size:11px;color:var(--ink3)}
-.mini{border:1px solid var(--line);background:var(--surface);border-radius:7px;padding:4px 9px;font-size:11.5px}
-.mini.dgr{color:var(--bad);border-color:color-mix(in srgb,var(--bad) 35%,var(--line))}
-details.adv2{border-top:1px solid var(--line)}
-details.adv2 summary{padding:10px 13px;font-size:12px;font-weight:600;color:var(--ink2);cursor:pointer;letter-spacing:.03em}
-details.adv2 .mpanel{padding-top:0}
-.stat{font-size:11.5px;color:var(--ink3);padding:0 13px 11px}
-@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+.toast.on{opacity:1}
 </style>
-
 </head>
 <body>
-<header class="top">
-  <div class="brand">
-    <span class="mark" aria-hidden="true">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
-        <path d="M2 8.5a15 15 0 0 1 20 0"/><path d="M5.5 12.5a10 10 0 0 1 13 0"/><path d="M9 16.5a5 5 0 0 1 6 0"/><circle cx="12" cy="20" r="1.1" fill="currentColor"/>
-      </svg>
-    </span>
-    <span class="brandtxt"><b id="siteName">샘플 · 84㎡ 3베이</b><span>시공 전 전파 예측</span></span>
-  </div>
+
+<header>
+  <span class="mark"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M2 8.5a15 15 0 0 1 20 0"/><path d="M5.5 12.5a10 10 0 0 1 13 0"/><path d="M9 16.5a5 5 0 0 1 6 0"/><circle cx="12" cy="20" r="1.1" fill="currentColor"/></svg></span>
+  <span class="brand"><b>WiFi 사각지대 체크</b><span>KANT · 시공 전 전파 예측</span></span>
   <span class="sp"></span>
-  <button class="tbtn" id="btnMode" title="표시 수준">
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 8h10M18 8h2M4 16h2M10 16h10"/><circle cx="16" cy="8" r="2.2"/><circle cx="8" cy="16" r="2.2"/></svg>
-    <span id="btnModeTxt">간단</span>
-  </button>
-  <button class="tbtn" id="btnSites">
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
-    현장
-  </button>
-  <button class="tbtn pri" id="btnSave">
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5 10 17.5 19 7"/></svg>
-    저장
-  </button>
+  <button class="tbtn" id="btnReset">처음부터</button>
 </header>
 
-<div class="app">
-  <aside class="colL">
-    <div class="panel guide" id="guide"></div>
-    <nav class="modes" id="modes" aria-label="편집 모드"></nav>
-    <div class="panel tools"><div class="mpanel" id="mpanel"></div></div>
-  </aside>
+<div class="stepbar" id="stepbar"></div>
 
-  <section class="stage">
-    <div class="cwrap">
-      <canvas id="cv"></canvas>
-      <div class="readout">
-        <span class="chip" id="chBand">2.4 GHz</span>
-        <span class="chip" id="chScale">축척 —</span>
-        <span class="chip" id="chCount">벽 0</span>
-      </div>
-      <div class="zoombar">
-        <button id="zIn" title="확대"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
-        <button id="zOut" title="축소"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14"/></svg></button>
-        <button id="zFit" title="맞춤"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3H3v6M15 3h6v6M9 21H3v-6M15 21h6v-6"/></svg></button>
-      </div>
-      <div class="hintbar" id="hint"></div>
-    </div>
+<main id="main">
+  <canvas id="cv"></canvas>
+  <div class="empty" id="empty">
+    <svg width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h18v18H3z"/><path d="M3 12h7v9M10 3v9h11"/></svg>
+    <b>아파트 도면을 올려보세요</b>
+    <span>벽을 자동으로 분석해서, 공유기 위치에 따라 어느 공간에 WiFi 신호가 안 닿는지 보여드립니다.</span>
+  </div>
+  <div class="legend" id="legend" hidden>
+    <span><i style="background:var(--bad)"></i>안 닿음</span>
+    <span><i style="background:var(--warn)"></i>아슬아슬</span>
+    <span><i style="background:var(--good);opacity:.5"></i>안정</span>
+  </div>
+  <div class="hint" id="hint" hidden></div>
+  <div class="zoom">
+    <button id="zIn" title="확대"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
+    <button id="zOut" title="축소"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14"/></svg></button>
+  </div>
+  <div class="toast" id="toast"></div>
+</main>
 
-    <div class="hud">
-      <div class="vtabs" id="netTabs" style="grid-template-columns:repeat(2,1fr)"></div>
-      <div class="vtabs" id="viewTabs"></div>
-    </div>
-
-    <div class="panel lgpanel">
-      <span class="mono" id="lgBandNote">2.4 GHz</span>
-      <div class="legend" id="legend"></div>
-    </div>
-  </section>
-
-  <aside class="colR">
-    <div class="panel">
-      <div class="phead"><h2><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg>진단 요약</h2><span class="sub" id="apCount">공유기 1대</span></div>
-      <div class="sumgrid">
-        <div><span class="k">최약 기기</span><div class="v" id="sWorst">—<span class="u"> dBm</span></div></div>
-        <div><span class="k">주의 이상</span><div class="v" id="sWarn">0<span class="u"> 대</span></div></div>
-        <div><span class="k">전체 기기</span><div class="v" id="sAll">0<span class="u"> 대</span></div></div>
-        <div><span class="k" id="kCov">커버리지</span><div class="v" id="sCov">—<span class="u"> %</span></div></div>
-      </div>
-    </div>
-
-    <div class="panel devs">
-      <div class="phead"><h2><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01"/></svg>IoT 기기별 예상 수신</h2><span class="sub">도면에서 선택</span></div>
-      <div id="devlist"></div>
-    </div>
-
-    <div class="panel judge">
-      <div class="phead"><h2><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11.5 12 14.5 22 4.5"/><path d="M21 12v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h11"/></svg>시공 판단</h2></div>
-      <div class="advice" id="advice"></div>
-      <details class="adv2 advonly">
-        <summary>고급 · 전파 모델 설정</summary>
-        <div class="mpanel">
-          <div class="row">
-            <div class="field">
-              <label>경로손실 지수 n <span class="mono" id="nVal">2.20</span></label>
-              <input type="range" id="nRange" min="1.8" max="3.0" step="0.05" value="2.2">
-            </div>
-          </div>
-          <div class="row">
-            <div class="field">
-              <label>설계 여유 (가구·재실자) <span class="mono" id="fmVal">3 dB</span></label>
-              <input type="range" id="fmRange" min="0" max="10" step="1" value="3">
-            </div>
-          </div>
-          <div class="row"><button class="tbtn" id="calAdv">현장 실측값으로 n 보정</button></div>
-          <p class="note">거리 손실은 1 m 기준(2.4 GHz 40.0 dB / 5 GHz 46.4 dB)에 <span class="mono">10·n·log₁₀(d)</span>를 더해 계산합니다. 벽은 공유기–기기 직선이 지나는 구간만 합산하고, 3번째 벽부터는 회절 경로를 감안해 85 %·70 %로 감쇠를 낮춰 반영합니다. 실측값이 아닌 <b>설계 참고용 예측</b>입니다.</p>
-        </div>
-      </details>
-      <div class="stat" id="saveStat"></div>
-    </div>
-
-    <div class="panel bomp advonly">
-      <div class="phead"><h2><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h10a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M9.5 8h5M9.5 12h5M9.5 16h3"/></svg>설계 산출서</h2><span class="sub">시공 전 확인용</span></div>
-      <div id="bom"></div>
-      <div class="advice" style="padding-top:11px">
-        <div class="row"><button class="tbtn" id="btnCsv">산출서 CSV 저장</button><button class="tbtn" id="btnPng2">도면 이미지 저장</button></div>
-      </div>
-    </div>
-  </aside>
-</div>
-
-<!-- ▼▼ KANT 링크: 아래 href="https://kantlighting.com" 를 실제 사이트 주소로 바꾸세요 ▼▼ -->
-<footer class="kfoot">
-  <b>칸트라이팅 KANT</b>
-  <span>시공 전 WiFi·Zigbee 전파 예측 도구</span>
-  <a href="https://kantlighting.com" target="_blank" rel="noopener">사이트 바로가기 →</a>
-</footer>
+<!-- ▼▼ KANT 링크: href 를 실제 사이트 주소로 바꾸세요 ▼▼ -->
+<footer><b>칸트라이팅 KANT</b> · 실측이 아닌 설계 예측입니다 · <a href="https://kantlighting.com" target="_blank" rel="noopener">사이트 바로가기 →</a></footer>
 <!-- ▲▲ 여기까지 ▲▲ -->
 
-<div class="scrim" id="scrim"></div>
-<div class="sheet" id="sheet"><h3 id="sheetTitle"></h3><div class="sbody" id="sheetBody"></div></div>
+<input type="file" id="fileIn" accept="image/*,application/pdf">
 
 <script>
+'use strict';
 /* ============================================================
-   전파 모델 상수
+   WiFi 사각지대 체크 — 단일 흐름 도구
+   ① 도면 업로드 → 벽 자동 분석(외벽/내벽)
+   ② 집 크기 선택 → 실제 치수 환산
+   ③ 공유기 배치 → 신호 안 닿는 공간 표시
+   벽 인식·전파 모델은 wifi-sim(전문가용)에서 검증한 것을 이식했다.
    ============================================================ */
-const WT = {
-  ext  :{ko:'외벽 콘크리트', a24:20, a5:30, c:'#2F3446', w:8},
-  bear :{ko:'내력벽 콘크리트',a24:14, a5:22, c:'#474D66', w:6.5},
-  brick:{ko:'조적 / 벽돌',   a24:8,  a5:13, c:'#8A6448', w:5.5},
-  light:{ko:'경량 석고벽',   a24:4,  a5:6,  c:'#8E93A8', w:4.5},
-  tile :{ko:'욕실 타일벽',   a24:9,  a5:14, c:'#41808E', w:5.5},
-  glass:{ko:'유리 / 창호',   a24:3,  a5:5,  c:'#3F9FC9', w:3.5},
-  door :{ko:'목문 (닫힘)',   a24:3,  a5:4,  c:'#B0813F', w:4.5},
-  metal:{ko:'금속문 / 샤프트',a24:25, a5:32, c:'#6E7078', w:7},
-};
-const RADIO = {
-  wifi24:{ko:'WiFi 2.4GHz', c:'#3D46D9'},
-  zigbee:{ko:'Zigbee 3.0',  c:'#1F8F6B'},
-  thread:{ko:'Thread/Matter',c:'#8A5BD6'},
-};
-/* 제품 라이브러리.
-   출력·수신감도는 모델별 실측치가 아니라 통신 방식·전원 방식별 표준 계급값이다.
-   같은 브랜드에서도 WiFi판과 Zigbee판이 따로 나오니 실제 구매 모델 규격을 확인할 것.
-   role: hub=코디네이터 / router=상시전원(메시 중계 가능) / end=배터리(중계 불가) */
-const PROD_BASE = {
-  // ── 일반 WiFi (통신사 공유기에 직접 붙는 기기)
-  'wifi.wallpad' :{g:'일반 · WiFi', ko:'월패드',          radio:'wifi24', role:'end', tx:18, req:-65, ab:'월'},
-  'wifi.camera'  :{g:'일반 · WiFi', ko:'홈카메라',        radio:'wifi24', role:'end', tx:18, req:-60, ab:'캠'},
-  'wifi.gateway' :{g:'일반 · WiFi', ko:'게이트웨이·허브',  radio:'wifi24', role:'end', tx:18, req:-68, ab:'GW'},
-  'wifi.doorlock':{g:'일반 · WiFi', ko:'도어락',          radio:'wifi24', role:'end', tx:14, req:-68, ab:'락'},
-  'wifi.switch'  :{g:'일반 · WiFi', ko:'스마트스위치',     radio:'wifi24', role:'end', tx:17, req:-70, ab:'스'},
-  'wifi.light'   :{g:'일반 · WiFi', ko:'스마트조명',      radio:'wifi24', role:'end', tx:17, req:-70, ab:'등'},
-  'wifi.valve'   :{g:'일반 · WiFi', ko:'가스차단기',      radio:'wifi24', role:'end', tx:15, req:-70, ab:'밸'},
-  'wifi.thermo'  :{g:'일반 · WiFi', ko:'온도조절기',      radio:'wifi24', role:'end', tx:15, req:-70, ab:'온'},
-  'wifi.curtain' :{g:'일반 · WiFi', ko:'커튼·블라인드',   radio:'wifi24', role:'end', tx:17, req:-70, ab:'커'},
-  'wifi.sensor'  :{g:'일반 · WiFi', ko:'감지 센서',       radio:'wifi24', role:'end', tx:14, req:-72, ab:'감'},
-  'wifi.plug'    :{g:'일반 · WiFi', ko:'스마트플러그',    radio:'wifi24', role:'end', tx:17, req:-72, ab:'플'},
 
-  // ── Aqara (아카라) — 허브 필요, 대부분 Zigbee 3.0
-  'aqara.hub'    :{g:'Aqara · 아카라', ko:'허브 M2·M3·M100 (코디네이터)', radio:'zigbee', role:'hub',    tx:9,  req:-70, ab:'허브', note:'허브 자체는 WiFi/유선으로 공유기에 붙습니다'},
-  'aqara.plug'   :{g:'Aqara · 아카라', ko:'스마트 플러그 (상시전원)',     radio:'zigbee', role:'router', tx:9,  req:-80, ab:'플'},
-  'aqara.sw_n'   :{g:'Aqara · 아카라', ko:'벽스위치 H1·D1 (중성선 O)',    radio:'zigbee', role:'router', tx:9,  req:-80, ab:'스'},
-  'aqara.sw_x'   :{g:'Aqara · 아카라', ko:'벽스위치 (중성선 X)',          radio:'zigbee', role:'end',    tx:6,  req:-80, ab:'스', note:'중성선이 없으면 중계를 못 합니다'},
-  'aqara.relay'  :{g:'Aqara · 아카라', ko:'릴레이 모듈 T2 (상시전원)',    radio:'zigbee', role:'router', tx:9,  req:-80, ab:'릴'},
-  'aqara.curtain':{g:'Aqara · 아카라', ko:'커튼 모터 (상시전원)',         radio:'zigbee', role:'router', tx:9,  req:-80, ab:'커'},
-  'aqara.door'   :{g:'Aqara · 아카라', ko:'문열림 센서 (배터리)',         radio:'zigbee', role:'end',    tx:4,  req:-80, ab:'문'},
-  'aqara.motion' :{g:'Aqara · 아카라', ko:'모션 센서 P1 (배터리)',        radio:'zigbee', role:'end',    tx:4,  req:-80, ab:'모'},
-  'aqara.temp'   :{g:'Aqara · 아카라', ko:'온습도 센서 (배터리)',         radio:'zigbee', role:'end',    tx:4,  req:-80, ab:'온'},
-  'aqara.leak'   :{g:'Aqara · 아카라', ko:'누수 센서 (배터리)',           radio:'zigbee', role:'end',    tx:4,  req:-80, ab:'누'},
-  'aqara.button' :{g:'Aqara · 아카라', ko:'무선 버튼·큐브 (배터리)',      radio:'zigbee', role:'end',    tx:4,  req:-80, ab:'버'},
-  'aqara.lock'   :{g:'Aqara · 아카라', ko:'도어락 (배터리)',              radio:'zigbee', role:'end',    tx:4,  req:-78, ab:'락'},
-  'aqara.fp2'    :{g:'Aqara · 아카라', ko:'재실센서 FP2 (WiFi · 허브 불필요)', radio:'wifi24', role:'end', tx:16, req:-68, ab:'FP'},
-  'aqara.cam'    :{g:'Aqara · 아카라', ko:'카메라 G3·G5 (WiFi · 허브 겸용)',   radio:'wifi24', role:'end', tx:17, req:-62, ab:'캠'},
-
-  // ── Zemismart (제미스마트) — Tuya 기반, WiFi판·Zigbee판이 따로 있음
-  'zemi.curt_z'  :{g:'Zemismart · 제미스마트', ko:'커튼 모터 (Zigbee)',   radio:'zigbee', role:'router', tx:9,  req:-80, ab:'커'},
-  'zemi.curt_w'  :{g:'Zemismart · 제미스마트', ko:'커튼 모터 (WiFi)',     radio:'wifi24', role:'end',    tx:17, req:-70, ab:'커'},
-  'zemi.blind'   :{g:'Zemismart · 제미스마트', ko:'블라인드 모터 (Zigbee)',radio:'zigbee', role:'router', tx:9, req:-80, ab:'블'},
-  'zemi.sw_z'    :{g:'Zemismart · 제미스마트', ko:'벽스위치 (Zigbee)',    radio:'zigbee', role:'router', tx:9,  req:-80, ab:'스'},
-  'zemi.sw_w'    :{g:'Zemismart · 제미스마트', ko:'벽스위치 (WiFi)',      radio:'wifi24', role:'end',    tx:17, req:-70, ab:'스'},
-  'zemi.hub'     :{g:'Zemismart · 제미스마트', ko:'Zigbee 허브 (Tuya)',   radio:'zigbee', role:'hub',    tx:9,  req:-70, ab:'허브'},
-
-  // ── 국내 브랜드
-  'kr.heyhome_p' :{g:'국내 브랜드', ko:'헤이홈 스마트플러그 (WiFi)',  radio:'wifi24', role:'end', tx:17, req:-72, ab:'플'},
-  'kr.heyhome_s' :{g:'국내 브랜드', ko:'헤이홈 스위치 (WiFi)',        radio:'wifi24', role:'end', tx:17, req:-70, ab:'스'},
-  'kr.wallpad'   :{g:'국내 브랜드', ko:'코맥스·코콤·현대 월패드',      radio:'wifi24', role:'end', tx:18, req:-65, ab:'월'},
-  'kr.lg'        :{g:'국내 브랜드', ko:'LG 씽큐 가전 (WiFi)',         radio:'wifi24', role:'end', tx:17, req:-68, ab:'LG'},
-  'kr.smartthings':{g:'국내 브랜드', ko:'삼성 스마트싱스 허브',        radio:'zigbee', role:'hub', tx:9,  req:-70, ab:'허브'},
-  'kr.mijia'     :{g:'국내 브랜드', ko:'샤오미 미지아 센서 (Zigbee)',  radio:'zigbee', role:'end', tx:4,  req:-80, ab:'미'},
+/* ---------- 벽 감쇠 (2.4 GHz, dB) ---------- */
+const WT={
+  ext  :{a:20,c:'#39406099',w:4.5,ko:'외벽'},
+  bear :{a:14,c:'#4a527399',w:3.5,ko:'내력벽'},
+  brick:{a:8, c:'#8a644899',w:3,  ko:'조적'},
+  light:{a:4, c:'#8e93a899',w:2.5,ko:'경량벽'},
+  tile :{a:9, c:'#41808e99',w:3,  ko:'욕실벽'},
+  glass:{a:3, c:'#3f9fc999',w:2,  ko:'창호'},
+  door :{a:3, c:'#b0813f99',w:2.5,ko:'문'},
+  metal:{a:25,c:'#6e707899',w:4,  ko:'금속'},
 };
-let PROD = {...PROD_BASE};
-function syncProd(){ PROD = {...PROD_BASE, ...(S && S.custom ? S.custom : {})}; }
-// 구버전 기기 종류 키를 새 제품 키로 옮긴다
-const LEGACY = {wallpad:'wifi.wallpad',camera:'wifi.camera',gateway:'wifi.gateway',doorlock:'wifi.doorlock',
-  switch:'wifi.switch',light:'wifi.light',valve:'wifi.valve',thermo:'wifi.thermo',curtain:'wifi.curtain',
-  sensor:'wifi.sensor',plug:'wifi.plug'};
-// 공유기 대표값 — 제조사가 EIRP를 공개하지 않아 카테고리 평균이다.
-// 실제 값은 RRA 적합성평가 인증정보의 공중선전력 또는 아래 '실측 보정'으로 맞춘다.
-const AP_PRESETS = {
-  kt6   :{g:'통신사 임대', ko:'KT 기가와이파이 홈 (Wi-Fi 6)',   p24:21,p5:21,gain:2, hint:'내장 안테나 · 단자함 설치가 잦다'},
-  kt5   :{g:'통신사 임대', ko:'KT 기가와이파이 (구형 Wi-Fi 5)', p24:20,p5:20,gain:2, hint:'2018년 이전 설치분'},
-  skb6  :{g:'통신사 임대', ko:'SK브로드밴드 기가 와이파이 (Wi-Fi 6)', p24:21,p5:21,gain:2, hint:''},
-  skb5  :{g:'통신사 임대', ko:'SK브로드밴드 기가 와이파이 (구형)',    p24:20,p5:20,gain:2, hint:''},
-  lg6   :{g:'통신사 임대', ko:'LG U+ 기가와이파이6',            p24:21,p5:21,gain:2, hint:''},
-  lg5   :{g:'통신사 임대', ko:'LG U+ 기가와이파이 (구형)',      p24:20,p5:20,gain:2, hint:''},
-  ext5g :{g:'통신사 임대', ko:'통신사 와이파이 확장기 (중계기)', p24:18,p5:19,gain:2, hint:'본체보다 한 단계 약하다'},
-  hna   :{g:'세대 내장',   ko:'아파트 홈네트워크 세대 AP',       p24:18,p5:20,gain:3, hint:'단자함·천장 매립이 많다'},
-  home  :{g:'시중 제품',   ko:'ipTIME 보급형 (내장 안테나)',     p24:17,p5:19,gain:2, hint:'A2004 급'},
-  ext   :{g:'시중 제품',   ko:'ipTIME 외장 안테나형',           p24:17,p5:19,gain:5, hint:'A3004NS 급 · 5 dBi'},
-  hi    :{g:'시중 제품',   ko:'ASUS·넷기어 상급형',             p24:17,p5:20,gain:4, hint:''},
-  mesh  :{g:'시중 제품',   ko:'메시 노드 (위성)',               p24:16,p5:18,gain:2, hint:'백홀에 출력을 나눠 쓴다'},
-  ceil  :{g:'시중 제품',   ko:'천장형 AP (기업용)',             p24:18,p5:20,gain:4, hint:'무지향 · 아래로 지향'},
-  custom:{g:'직접 입력',   ko:'직접 입력',                      p24:20,p5:21,gain:2, hint:''},
-};
-const AP_RX_ADV = 3;   // 공유기 수신부·안테나 다이버시티 우위
-const COV_TH   = -70;  // 커버리지 1대로 인정하는 하한
-const BACKHAUL_TH = -65; // 무선 중계기가 본체에서 받아야 하는 최소값
-const CH24=[1,6,11], CH5=[36,44,149,157];
-const VIEWS={
-  signal  :{ko:'신호 세기',  sub:'공유기 → 기기 (하향)'},
-  overlap :{ko:'중복 커버리지', sub:`${COV_TH} dBm 이상으로 잡히는 공유기 수`},
-  failover:{ko:'이중화',     sub:'가장 센 공유기 1대가 멈췄을 때'},
-  gap     :{ko:'미달 구역',  sub:'목표 세기에 못 미치는 면적'},
-};
-const ENC = [
-  {v:0, ko:'개방 설치 (선반·벽면)'},
-  {v:3, ko:'신발장 · 가구 뒤'},
-  {v:12,ko:'세대 단자함(금속) 내부'},
-];
-const ZBANDS = [
-  {lim:-65, key:'good', ko:'안정'},
-  {lim:-75, key:'ok',   ko:'양호'},
-  {lim:-82, key:'warn', ko:'주의'},
-  {lim:-88, key:'risk', ko:'위험'},
-  {lim:-999,key:'bad',  ko:'탈락'},
-];
-const BANDS = [
-  {lim:-60, key:'good', ko:'안정'},
-  {lim:-67, key:'ok',   ko:'양호'},
-  {lim:-72, key:'warn', ko:'주의'},
-  {lim:-78, key:'risk', ko:'위험'},
-  {lim:-999,key:'bad',  ko:'탈락'},
-];
+const N_EXP=2.2, FADE=3, EIRP=21, TH_BAD=-70, TH_WARN=-64;   // KT급 공유기, IoT 등록 한계 −70 dBm
 
-/* ============================================================
-   샘플 현장 — 84㎡ 판상형 3베이, 공유기는 현관 세대단자함
-   ============================================================ */
+/* ---------- 상태 ---------- */
+let S=null;
+function freshState(){ return {bg:null, mpp:1, walls:[], rooms:[], aps:[], sized:false}; }
+S=freshState();
+let view={s:60,ox:40,oy:40}, userMoved=false;
+let GRID=null, gridSig='';
+let heatCv=null, heatDirty=true;
+let addingAp=false;
+
+/* ---------- 샘플 (84㎡ 3베이) ---------- */
 function sampleState(){
   const W=(x1,y1,x2,y2,t)=>({x1,y1,x2,y2,t});
-  return {
-    name:'샘플 · 84㎡ 3베이',
-    bg:null, mpp:1, band:'2.4', n:2.2, fade:3, view:'signal', covTarget:-70, covTargetZ:-80, net:'wifi', custom:{}, simple:true,
-    scaled:true, apTouched:true,   // 샘플·기존 저장본은 안내를 건너뛴다 (hydrate 가 이 값을 기본으로 쓴다)
+  return {bg:null, mpp:1, sized:true,
     rooms:[
       ['침실 3',0,0,3.0,4.6],['거실',3.0,0,7.4,5.8],['안방',7.4,0,11.4,4.2],
       ['드레스룸',7.4,4.2,8.8,6.2],['안방 욕실',8.8,4.2,11.4,6.2],
@@ -589,1697 +200,12 @@ function sampleState(){
       W(7.4,6.2,11.4,6.2,'bear'),
       W(7.4,6.2,7.4,7.0,'light'), W(7.4,7.0,7.4,7.8,'door'), W(7.4,7.8,7.4,8.4,'light'),
     ],
-    aps:[{id:'ap1', name:'KT 기가와이파이 홈', x:6.30, y:7.90, preset:'kt6', tx:21, gain:2, enc:3, wired:true, ch24:1, ch5:36}],
-    devs:[
-      {id:'d1', k:'wifi.wallpad', name:'월패드',           x:5.52, y:6.10},
-      {id:'d2', k:'wifi.doorlock',name:'현관 도어락',       x:6.10, y:8.22},
-      {id:'d3', k:'wifi.switch',  name:'거실 스위치',       x:5.30, y:5.62},
-      {id:'d4', k:'wifi.camera',  name:'거실 홈카메라',     x:3.35, y:0.45},
-      {id:'d5', k:'wifi.switch',  name:'안방 스위치',       x:7.62, y:4.02},
-      {id:'d6', k:'wifi.curtain', name:'안방 커튼모터',     x:10.90,y:0.40},
-      {id:'d7', k:'wifi.thermo',  name:'안방 온도조절기',   x:10.95,y:3.92},
-      {id:'d8', k:'wifi.switch',  name:'침실3 스위치',      x:2.80, y:4.42},
-      {id:'d9', k:'wifi.gateway', name:'조명 게이트웨이',   x:0.55, y:0.65},
-      {id:'d10',k:'wifi.valve',   name:'주방 가스차단기',   x:0.42, y:5.10},
-      {id:'d11',k:'wifi.sensor',  name:'다용도실 누수감지', x:11.05,y:7.95},
-      {id:'z1', k:'aqara.hub',    name:'Aqara 허브 M2',     x:4.60, y:1.60},
-      {id:'z2', k:'aqara.plug',   name:'Aqara 플러그 (주방)',x:0.80, y:6.40},
-      {id:'z3', k:'aqara.door',   name:'Aqara 현관 문열림',  x:6.05, y:8.05},
-      {id:'z4', k:'aqara.temp',   name:'Aqara 안방 온습도',  x:10.60,y:0.90},
-      {id:'z5', k:'aqara.leak',   name:'Aqara 다용도실 누수',x:10.70,y:7.60},
-    ],
+    aps:[{id:'ap1', x:6.30, y:7.90}],
   };
-}
-
-let S = loadLocal() || sampleState();
-let mode='view', wallType='bear', doorKind='open', devKind='wifi.switch';
-let sel=null;                 // {t:'ap'|'dev', id}
-let ghost=null;               // 추천 위치
-let view={s:60, ox:0, oy:0};  // px per meter, offset px
-let userMoved=false;          // 사용자가 직접 화면을 움직였는가
-let draft=null;               // 그리는 중인 선
-let scaleLine=null;
-
-/* ============================================================
-   기하 · 전파 계산
-   ============================================================ */
-function segCross(ax,ay,bx,by,cx,cy,dx,dy){
-  const d=(dy-cy)*(bx-ax)-(dx-cx)*(by-ay);
-  if(Math.abs(d)<1e-12) return false;
-  const ua=((dx-cx)*(ay-cy)-(dy-cy)*(ax-cx))/d;
-  const ub=((bx-ax)*(ay-cy)-(by-ay)*(ax-cx))/d;
-  return ua>0 && ua<1 && ub>0 && ub<1;
-}
-function att(w,band){ return band==='5' ? WT[w.t].a5 : WT[w.t].a24; }
-
-// 공유기 → 지점 직선이 지나는 벽 목록
-function crossed(ap,x,y){
-  const out=[];
-  for(const w of S.walls){
-    if(segCross(ap.x,ap.y,x,y,w.x1,w.y1,w.x2,w.y2)) out.push(w);
-  }
-  return out;
-}
-const WW=[1,1,0.75,0.6,0.5,0.4];
-function wallLoss(list,band){
-  const a=list.map(w=>att(w,band)).sort((p,q)=>q-p);
-  let sum=0;
-  for(let i=0;i<a.length;i++) sum += a[i]*(WW[i]!==undefined?WW[i]:0.3);
-  return Math.min(sum,40);   // 실제로는 문·복도를 도는 우회 경로가 살아남는다
-}
-function eirp(ap){ return (ap.tx??20) + (ap.gain??0); }
-function pathLoss(ap,x,y,band,n,fade){
-  const d=Math.max(0.6,Math.hypot(x-ap.x,y-ap.y));
-  const pl0=band==='5'?46.4:40.0;
-  return (pl0 + 10*n*Math.log10(d)) + (ap.enc||0) + wallLoss(crossed(ap,x,y),band) + fade;
-}
-function rssiFromAp(ap,x,y,band,n,fade){ return eirp(ap) - pathLoss(ap,x,y,band,n,fade); }
-// 하향(공유기→기기)과 상향(기기→공유기)을 같이 본다. 실제 탈락은 대개 상향에서 먼저 난다.
-function linkOf(dev){
-  const P=PROD[dev.k]||PROD['wifi.switch'];
-  // 허브는 스스로 WiFi/유선으로 공유기에 붙는다 — 이 링크가 Zigbee망 전체의 목줄이다
-  if(P.radio==='wifi24' || P.role==='hub'){
-    const {v,ap}=bestAp(dev.x,dev.y);
-    if(!ap) return {dn:v, up:v, eff:v, ap:null, net:'wifi'};
-    const up = v - (ap.tx??20) + P.tx + AP_RX_ADV;
-    return {dn:v, up, eff:Math.min(v,up), ap, net:'wifi'};
-  }
-  const m=mesh().get(dev.id);
-  if(!m) return {dn:-999, up:-999, eff:-999, ap:null, net:'zigbee', parent:null, hops:99, noHub:true};
-  return {dn:m.v, up:m.v, eff:m.v, ap:null, net:'zigbee', parent:m.parent, hops:m.hops};
-}
-function netOf(dev){ const P=PROD[dev.k]||{}; return (P.radio==='wifi24'||P.role==='hub')?'wifi':'zigbee'; }
-function rssiAt(x,y){
-  let best=-200;
-  for(const ap of S.aps) best=Math.max(best, rssiFromAp(ap,x,y,S.band,S.n,S.fade));
-  return best;
-}
-function bestAp(x,y){
-  let best=-200,who=null;
-  for(const ap of S.aps){ const v=rssiFromAp(ap,x,y,S.band,S.n,S.fade); if(v>best){best=v;who=ap;} }
-  return {v:best, ap:who};
-}
-/* 외벽·금속문으로 둘러싸인 '실내'를 격자에 확산으로 찾아낸다.
-   외피가 닫혀 있지 않으면 도면 전체를 대상으로 되돌린다. */
-let GRID=null, gridSig='';
-function ensureGrid(){
-  const bb=bbox();
-  const cell=Math.max(0.09, Math.max(bb.w,bb.h)/150);
-  const PAD=2;
-  const b={x:bb.x-PAD*cell, y:bb.y-PAD*cell, w:bb.w+2*PAD*cell, h:bb.h+2*PAD*cell};
-  const gw=Math.max(5,Math.ceil(b.w/cell)), gh=Math.max(5,Math.ceil(b.h/cell));
-  const sig=[S.walls.length,b.x.toFixed(3),b.y.toFixed(3),b.w.toFixed(3),b.h.toFixed(3),gw,gh].join('|');
-  if(GRID && gridSig===sig) return GRID;
-
-  // 모든 벽을 장벽으로 래스터화한다. 촘촘히 찍으면 8-연결 장벽이 되어 4-연결 확산을 막는다.
-  const wall=new Uint8Array(gw*gh);
-  for(const w of S.walls){
-    const L=Math.hypot(w.x2-w.x1,w.y2-w.y1), n=Math.max(2,Math.ceil(L/(cell*0.35)));
-    for(let k=0;k<=n;k++){
-      const t=k/n;
-      const i=Math.floor((w.x1+(w.x2-w.x1)*t-b.x)/cell), j=Math.floor((w.y1+(w.y2-w.y1)*t-b.y)/cell);
-      if(i>=0&&j>=0&&i<gw&&j<gh) wall[j*gw+i]=1;
-    }
-  }
-  // 도면 바깥(테두리)에서 안쪽으로 채운다. 못 닿은 곳이 실내다 — 벽 종류와 무관하다.
-  const outside=new Uint8Array(gw*gh);
-  const q=[];
-  const push=(i,j)=>{ const p=j*gw+i; if(!outside[p]&&!wall[p]){outside[p]=1;q.push(p);} };
-  for(let i=0;i<gw;i++){ push(i,0); push(i,gh-1); }
-  for(let j=0;j<gh;j++){ push(0,j); push(gw-1,j); }
-  while(q.length){
-    const p=q.pop(), i=p%gw, j=(p-i)/gw;
-    if(i>0)    push(i-1,j);
-    if(i<gw-1) push(i+1,j);
-    if(j>0)    push(i,j-1);
-    if(j<gh-1) push(i,j+1);
-  }
-  const inside=new Uint8Array(gw*gh);
-  let cnt=0;
-  for(let p=0;p<inside.length;p++) if(!outside[p]){ inside[p]=1; cnt++; }
-
-  // 외벽이 닫혀 있지 않으면 실내가 거의 안 남는다 → 도면 전체를 대상으로 되돌린다
-  const bboxCells=(bb.w/cell)*(bb.h/cell);
-  const leaked = !S.walls.length || cnt < bboxCells*0.35;
-  if(leaked){
-    inside.fill(0); cnt=0;
-    for(let j=PAD;j<gh-PAD;j++) for(let i=PAD;i<gw-PAD;i++){ inside[j*gw+i]=1; cnt++; }
-  }
-  GRID={b,cell,gw,gh,inside,leaked,area:cnt*cell*cell};
-  gridSig=sig;
-  return GRID;
-}
-const PYEONG = 3.305785;
-function planArea(){ return ensureGrid().area; }
-
-// 실내 전체를 대상으로 한 커버리지 통계
-function netTarget(net){ return (net||S.net)==='zigbee' ? (S.covTargetZ||-80) : (S.covTarget||COV_TH); }
-function valAt(x,y,net){ return (net||S.net)==='zigbee' ? zigbeeAt(x,y) : rssiAt(x,y); }
-function coverageStats(target,net){
-  net=net||S.net;
-  const G=ensureGrid(); const tg=target??netTarget(net);
-  let inC=0, cov=0;
-  for(let j=0;j<G.gh;j++){
-    const y=G.b.y+(j+0.5)*G.cell;
-    for(let i=0;i<G.gw;i++){
-      if(!G.inside[j*G.gw+i]) continue;
-      inC++;
-      if(valAt(G.b.x+(i+0.5)*G.cell, y, net)>=tg) cov++;
-    }
-  }
-  const a=G.cell*G.cell;
-  return {inC, cov, pct: inC?cov/inC*100:100, areaIn:inC*a, areaBad:(inC-cov)*a};
-}
-// 자동 설계용 성긴 평가점 (약 0.5 m 간격)
-function coarseCells(){
-  const G=ensureGrid();
-  let spacing=0.5;
-  const est=(G.b.w/spacing)*(G.b.h/spacing);
-  if(est>520) spacing *= Math.sqrt(est/520);       // 큰 도면에서도 계산 시간을 잡아둔다
-  const step=Math.max(1, Math.round(spacing/G.cell));
-  const out=[];
-  for(let j=(step>>1);j<G.gh;j+=step)
-    for(let i=(step>>1);i<G.gw;i+=step)
-      if(G.inside[j*G.gw+i]) out.push({x:G.b.x+(i+0.5)*G.cell, y:G.b.y+(j+0.5)*G.cell});
-  return out;
-}
-// 장비를 놓을 수 있는 후보 지점 (실내 + 벽에서 떨어진 곳)
-function candidateSpots(){
-  const G=ensureGrid();
-  const step=Math.max(1, Math.round(Math.max(0.45, Math.max(G.b.w,G.b.h)/26)/G.cell));
-  const out=[];
-  for(let j=(step>>1);j<G.gh;j+=step)
-    for(let i=(step>>1);i<G.gw;i+=step){
-      if(!G.inside[j*G.gw+i]) continue;
-      const x=G.b.x+(i+0.5)*G.cell, y=G.b.y+(j+0.5)*G.cell;
-      let near=false;
-      for(const w of S.walls){ if(distToSegM(x,y,w)<0.28){near=true;break;} }
-      if(!near) out.push({x,y});
-    }
-  return out;
-}
-function roomAt(x,y){
-  for(const r of S.rooms) if(x>=r[1]&&x<=r[3]&&y>=r[2]&&y<=r[4]) return r[0];
-  return null;
-}
-// 그 지점을 COV_TH 이상으로 잡는 공유기 수
-function covCount(x,y){
-  let c=0;
-  for(const ap of S.aps) if(rssiFromAp(ap,x,y,S.band,S.n,S.fade)>=COV_TH) c++;
-  return c;
-}
-// 가장 센 공유기 한 대가 멈췄을 때 남는 신호
-function failoverRssi(x,y){
-  if(S.aps.length<2) return -200;
-  const v=S.aps.map(ap=>rssiFromAp(ap,x,y,S.band,S.n,S.fade)).sort((a,b)=>b-a);
-  return v[1];
-}
-// 무선 중계기가 본체(유선 공유기)로부터 받는 신호
-function parentRssi(x,y,skipId){
-  let best=-200;
-  for(const ap of S.aps){
-    if(ap.id===skipId || ap.wired===false) continue;
-    best=Math.max(best, rssiFromAp(ap,x,y,S.band,S.n,S.fade));
-  }
-  return best;
-}
-function apHealth(ap){
-  if(ap.wired!==false) return {ok:true, v:null};
-  const v=parentRssi(ap.x,ap.y,ap.id);
-  return {ok:v>=BACKHAUL_TH, v};
-}
-// 2.4 GHz 1·6·11 — 겹침이 가장 적은 채널을 순서대로 배정
-function assignChannels(){
-  const list=S.band==='5'?CH5:CH24, key=S.band==='5'?'ch5':'ch24';
-  const done=[];
-  for(const ap of S.aps){
-    let best=list[0], bestCost=Infinity;
-    for(const ch of list){
-      let cost=0;
-      for(const o of done){
-        if(o[key]!==ch) continue;
-        cost += Math.max(0, rssiFromAp(o,ap.x,ap.y,S.band,S.n,S.fade)+95); // 서로 세게 들릴수록 나쁨
-      }
-      if(cost<bestCost){bestCost=cost;best=ch;}
-    }
-    ap[key]=best; done.push(ap);
-  }
-}
-/* ── Zigbee / Thread 메시 ──
-   상시전원 기기(router)만 중계한다. 배터리 센서(end)는 부모에 매달릴 뿐이다.
-   허브에서 각 라우터까지 '가장 약한 구간이 가장 센' 경로(widest path)를 푼다. */
-function linkBetween(txA,txB,ax,ay,bx,by){
-  const tx=Math.min(txA,txB);
-  const d=Math.max(0.6,Math.hypot(ax-bx,ay-by));
-  return tx - (40.0 + 10*S.n*Math.log10(d)) - wallLoss(crossed({x:ax,y:ay},bx,by),'2.4') - S.fade;
-}
-const isMeshRadio = k => ['zigbee','thread'].includes((PROD[k]||{}).radio);
-function backboneNodes(){
-  return S.devs.filter(d=>isMeshRadio(d.k) && ['hub','router'].includes(PROD[d.k].role));
-}
-function meshLink(a,b){ return linkBetween(PROD[a.k].tx, PROD[b.k].tx, a.x,a.y, b.x,b.y); }
-
-let MESH=null, meshDirty=true;
-function mesh(){ if(meshDirty||!MESH){ MESH=solveMesh(); meshDirty=false; } return MESH; }
-function solveMesh(){
-  const res=new Map();
-  const back=backboneNodes();
-  const hubs=back.filter(d=>PROD[d.k].role==='hub');
-  if(!hubs.length) return res;
-  const st=new Map();
-  back.forEach(n=>st.set(n.id,{v:PROD[n.k].role==='hub'?999:-999, parent:null, hops:PROD[n.k].role==='hub'?0:99}));
-  const done=new Set();
-  while(true){
-    let cur=null;
-    for(const n of back) if(!done.has(n.id) && (!cur || st.get(n.id).v>st.get(cur.id).v)) cur=n;
-    if(!cur || st.get(cur.id).v<=-990) break;
-    done.add(cur.id);
-    for(const n of back){
-      if(done.has(n.id)) continue;
-      const l=Math.min(st.get(cur.id).v, meshLink(cur,n));
-      if(l>st.get(n.id).v) st.set(n.id,{v:l, parent:cur.id, hops:st.get(cur.id).hops+1});
-    }
-  }
-  for(const n of back) res.set(n.id, st.get(n.id));
-  // 배터리 엔드디바이스: 가장 좋은 부모에 매달린다
-  for(const d of S.devs){
-    if(!isMeshRadio(d.k) || PROD[d.k].role!=='end') continue;
-    let best=null;
-    for(const n of back){
-      const s2=st.get(n.id); if(!s2 || s2.v<=-990) continue;
-      const l=Math.min(s2.v, meshLink(d,n));
-      if(!best || l>best.v) best={v:l, parent:n.id, hops:s2.hops+1};
-    }
-    res.set(d.id, best||{v:-999,parent:null,hops:99});
-  }
-  return res;
-}
-// 임의 지점에 배터리 센서를 놓았을 때 확보되는 Zigbee 링크
-function zigbeeAt(x,y){
-  const M=mesh(), back=backboneNodes();
-  let best=-200;
-  for(const n of back){
-    const s2=M.get(n.id); if(!s2 || s2.v<=-990) continue;
-    const l=Math.min(s2.v, linkBetween(4, PROD[n.k].tx, x,y, n.x,n.y));
-    if(l>best) best=l;
-  }
-  return best;
-}
-function hubHealth(){
-  const hubs=S.devs.filter(d=>isMeshRadio(d.k)&&PROD[d.k].role==='hub');
-  if(!hubs.length) return null;
-  return hubs.map(h=>{ const L=linkOf(h); return {h, v:L.eff, st:devStatus(L.eff, PROD[h.k].req)}; });
-}
-function bandOf(r){ for(const b of BANDS) if(r>=b.lim) return b; return BANDS[BANDS.length-1]; }
-function bandOfZ(r){ for(const b of ZBANDS) if(r>=b.lim) return b; return ZBANDS[ZBANDS.length-1]; }
-function bandFor(r,net){ return net==='zigbee'?bandOfZ(r):bandOf(r); }
-function cssv(k){ return getComputedStyle(document.documentElement).getPropertyValue('--'+k).trim(); }
-
-// 기기 상태: 제품별 권장 수신감도 기준
-const simpleWord=k=>({good:'닿음',ok:'닿음',warn:'아슬아슬',risk:'안 닿음',bad:'안 닿음'}[k]||k);
-function devStatus(r,req){
-  if(r>=req+6) return {key:'good',ko:'안정'};
-  if(r>=req)   return {key:'ok',  ko:'양호'};
-  if(r>=req-4) return {key:'warn',ko:'주의'};
-  if(r>=req-9) return {key:'risk',ko:'위험'};
-  return {key:'bad',ko:'탈락'};
-}
-function bbox(){
-  let a=Infinity,b=Infinity,c=-Infinity,d=-Infinity;
-  const pt=(x,y)=>{a=Math.min(a,x);b=Math.min(b,y);c=Math.max(c,x);d=Math.max(d,y);};
-  for(const w of S.walls){pt(w.x1,w.y1);pt(w.x2,w.y2);}
-  if(S.bg){pt(0,0);pt(S.bg.w*S.mpp,S.bg.h*S.mpp);}
-  for(const p of S.aps) pt(p.x,p.y);
-  for(const p of S.devs) pt(p.x,p.y);
-  if(!isFinite(a)) return {x:0,y:0,w:10,h:8};
-  return {x:a,y:b,w:Math.max(c-a,1),h:Math.max(d-b,1)};
 }
 
 /* ============================================================
-   캔버스
-   ============================================================ */
-const cv=document.getElementById('cv'), ctx=cv.getContext('2d');
-let CW=0,CH=0,DPR=1;
-function resize(){
-  DPR=Math.min(window.devicePixelRatio||1,2);
-  const r=cv.getBoundingClientRect();
-  CW=Math.max(1,Math.round(r.width)); CH=Math.max(1,Math.round(r.height));
-  cv.width=CW*DPR; cv.height=CH*DPR;
-  ctx.setTransform(DPR,0,0,DPR,0,0);
-  draw();
-}
-function fit(){
-  const b=bbox();
-  if(!(CW>0&&CH>0)) return;
-  const padX=26, padTop=30, padBot=48;      // 하단 안내바가 도면을 가리지 않도록
-  const s=Math.min((CW-padX*2)/b.w, (CH-padTop-padBot)/b.h);
-  view.s=s;
-  view.ox=(CW-b.w*s)/2 - b.x*s;
-  view.oy=padTop + (CH-padTop-padBot-b.h*s)/2 - b.y*s;
-}
-const X=x=>x*view.s+view.ox, Y=y=>y*view.s+view.oy;
-const mx=px=>(px-view.ox)/view.s, my=py=>(py-view.oy)/view.s;
-
-let heatCv=document.createElement('canvas'), heatBox=null, heatDirty=true;
-function buildHeat(){
-  if(!heatDirty && heatBox) return heatBox;
-  const b=bbox();
-  const cell=Math.max(0.10, Math.max(b.w,b.h)/150);
-  const gw=Math.max(2,Math.ceil(b.w/cell)), gh=Math.max(2,Math.ceil(b.h/cell));
-  heatCv.width=gw; heatCv.height=gh;
-  const hc=heatCv.getContext('2d');
-  const img=hc.createImageData(gw,gh);
-  const cols={};
-  for(const bd of BANDS) cols[bd.key]=hexToRgb(cssv(bd.key)||'#888');
-  const ovl=[cols.bad, cols.warn, cols.ok, cols.good];   // 0 / 1 / 2 / 3대 이상
-  const G=ensureGrid(), NET=S.net, tg=netTarget(NET);
-  // 격자 해상도가 같으므로 실내 마스크를 그대로 쓴다 (다르면 좌표로 환산)
-  const same=(G.gw===gw&&G.gh===gh);
-  const isIn=(i,j)=>{
-    if(same) return !!G.inside[j*gw+i];
-    const gi=Math.min(G.gw-1,Math.max(0,Math.floor(((b.x+(i+0.5)*cell)-G.b.x)/G.cell)));
-    const gj=Math.min(G.gh-1,Math.max(0,Math.floor(((b.y+(j+0.5)*cell)-G.b.y)/G.cell)));
-    return !!G.inside[gj*G.gw+gi];
-  };
-  for(let j=0;j<gh;j++){
-    const y=b.y+(j+0.5)*cell;
-    for(let i=0;i<gw;i++){
-      const o=(j*gw+i)*4;
-      if(!isIn(i,j)){ img.data[o+3]=0; continue; }        // 실외는 칠하지 않는다
-      const x=b.x+(i+0.5)*cell;
-      let c, a=118;
-      if(S.view==='overlap')       c=NET==='zigbee'?cols[bandOfZ(zigbeeAt(x,y)).key]:ovl[Math.min(3,covCount(x,y))];
-      else if(S.view==='failover') c=NET==='zigbee'?cols[bandOfZ(zigbeeAt(x,y)).key]:cols[bandOf(failoverRssi(x,y)).key];
-      else if(S.view==='gap'){
-        const bad=valAt(x,y,NET)<tg;
-        c=bad?cols.bad:cols.good; a=bad?175:38;
-      }
-      else                         c=cols[bandFor(valAt(x,y,NET),NET).key];
-      img.data[o]=c[0]; img.data[o+1]=c[1]; img.data[o+2]=c[2]; img.data[o+3]=a;
-    }
-  }
-  hc.putImageData(img,0,0);
-  heatDirty=false; heatBox={b,gw,gh};
-  return heatBox;
-}
-function hexToRgb(h){
-  h=h.replace('#','');
-  if(h.length===3) h=h.split('').map(c=>c+c).join('');
-  const v=parseInt(h,16);
-  return [(v>>16)&255,(v>>8)&255,v&255];
-}
-
-function draw(){
-  ctx.clearRect(0,0,CW,CH);
-  ctx.fillStyle=cssv('plan'); ctx.fillRect(0,0,CW,CH);
-
-  // 배경 도면 이미지
-  if(S.bg && S.bg.img){
-    ctx.globalAlpha=.92;
-    ctx.drawImage(S.bg.img, X(0), Y(0), S.bg.w*S.mpp*view.s, S.bg.h*S.mpp*view.s);
-    ctx.globalAlpha=1;
-  } else {
-    // 샘플 평면: 실 채움 + 이름/면적
-    ctx.fillStyle=cssv('room');
-    for(const r of S.rooms) ctx.fillRect(X(r[1]),Y(r[2]),(r[3]-r[1])*view.s,(r[4]-r[2])*view.s);
-  }
-
-  // 히트맵
-  if(S.aps.length){
-    const h=buildHeat();
-    ctx.imageSmoothingEnabled=true;
-    ctx.drawImage(heatCv, X(h.b.x), Y(h.b.y), h.b.w*view.s, h.b.h*view.s);
-  }
-
-  // 실 라벨
-  if(!S.bg){
-    ctx.textAlign='center'; ctx.textBaseline='middle';
-    for(const r of S.rooms){
-      const cx=X((r[1]+r[3])/2), cy=Y((r[2]+r[4])/2);
-      const area=((r[3]-r[1])*(r[4]-r[2])).toFixed(1);
-      if(view.s<26) continue;
-      ctx.lineJoin='round';
-      ctx.strokeStyle=cssv('plan'); ctx.lineWidth=3.5;
-      ctx.font='600 11px "IBM Plex Sans KR",sans-serif';
-      ctx.strokeText(r[0],cx,cy-7);
-      ctx.fillStyle=cssv('roomInk'); ctx.fillText(r[0],cx,cy-7);
-      ctx.font='400 9.5px "IBM Plex Mono",monospace';
-      ctx.strokeStyle=cssv('plan'); ctx.lineWidth=3.5; ctx.strokeText(area+' ㎡',cx,cy+7);
-      ctx.fillStyle=cssv('roomInk'); ctx.fillText(area+' ㎡',cx,cy+7);
-    }
-  }
-
-  // 벽
-  ctx.lineCap='round';
-  for(const w of S.walls){
-    ctx.strokeStyle=WT[w.t].c;
-    ctx.lineWidth=Math.max(1.6, WT[w.t].w*view.s/60);
-    ctx.beginPath(); ctx.moveTo(X(w.x1),Y(w.y1)); ctx.lineTo(X(w.x2),Y(w.y2)); ctx.stroke();
-    if(w.t==='door'||w.t==='glass'){
-      ctx.strokeStyle=cssv('plan'); ctx.lineWidth=Math.max(.7,WT[w.t].w*view.s/240);
-      ctx.beginPath(); ctx.moveTo(X(w.x1),Y(w.y1)); ctx.lineTo(X(w.x2),Y(w.y2)); ctx.stroke();
-    }
-  }
-
-  // 그리는 중
-  if(draft){
-    ctx.setLineDash([5,4]);
-    ctx.strokeStyle=mode==='scale'?cssv('accent'):WT[wallType].c;
-    ctx.lineWidth=2.5;
-    ctx.beginPath(); ctx.moveTo(X(draft.x1),Y(draft.y1)); ctx.lineTo(X(draft.x2),Y(draft.y2)); ctx.stroke();
-    ctx.setLineDash([]);
-    const L=Math.hypot(draft.x2-draft.x1,draft.y2-draft.y1);
-    tag(( (X(draft.x1)+X(draft.x2))/2 ), ((Y(draft.y1)+Y(draft.y2))/2)-14, L.toFixed(2)+' m', cssv('accent'));
-  }
-  if(scaleLine){
-    ctx.strokeStyle=cssv('accent'); ctx.lineWidth=2.5;
-    ctx.beginPath(); ctx.moveTo(X(scaleLine.x1),Y(scaleLine.y1)); ctx.lineTo(X(scaleLine.x2),Y(scaleLine.y2)); ctx.stroke();
-  }
-
-  // 추천 위치
-  if(ghost){
-    ctx.setLineDash([4,4]); ctx.strokeStyle=cssv('accent'); ctx.lineWidth=2;
-    ctx.beginPath(); ctx.arc(X(ghost.x),Y(ghost.y),13,0,7); ctx.stroke(); ctx.setLineDash([]);
-    tag(X(ghost.x),Y(ghost.y)-24,'추천 위치',cssv('accent'));
-  }
-
-  // Zigbee 메시 연결선 (부모까지)
-  if(S.devs.some(d=>isMeshRadio(d.k))){
-    const M=mesh(), byId={}; S.devs.forEach(d=>byId[d.id]=d);
-    for(const d of S.devs){
-      if(!isMeshRadio(d.k)) continue;
-      const m=M.get(d.id); if(!m||!m.parent) continue;
-      const pn=byId[m.parent]; if(!pn) continue;
-      const st=devStatus(m.v, PROD[d.k].req);
-      ctx.strokeStyle=cssv(st.key);
-      ctx.globalAlpha = S.net==='zigbee' ? .9 : .22;
-      ctx.lineWidth = PROD[d.k].role==='end' ? 1.5 : 2.6;
-      ctx.setLineDash(PROD[d.k].role==='end' ? [5,4] : []);
-      ctx.beginPath(); ctx.moveTo(X(d.x),Y(d.y)); ctx.lineTo(X(pn.x),Y(pn.y)); ctx.stroke();
-      ctx.setLineDash([]); ctx.globalAlpha=1;
-    }
-  }
-
-  // 기기
-  for(const d of S.devs){
-    const {eff:v}=linkOf(d);
-    const P=PROD[d.k]||PROD['wifi.switch'];
-    const st=devStatus(v,P.req);
-    const c=cssv(st.key);
-    const px=X(d.x),py=Y(d.y), on=sel&&sel.t==='dev'&&sel.id===d.id;
-    const R=on?12:10;
-    ctx.beginPath();
-    if(P.role==='hub') roundRect(px-R-2,py-R-2,(R+2)*2,(R+2)*2,5);
-    else if(P.radio!=='wifi24'){ for(let q=0;q<6;q++){const a2=q*Math.PI/3-Math.PI/2;
-      const fx=px+R*1.08*Math.cos(a2), fy=py+R*1.08*Math.sin(a2); q?ctx.lineTo(fx,fy):ctx.moveTo(fx,fy);} ctx.closePath(); }
-    else ctx.arc(px,py,R,0,7);
-    ctx.fillStyle=cssv('surface'); ctx.fill();
-    ctx.lineWidth=on?3:2.4; ctx.strokeStyle=c; ctx.stroke();
-    ctx.fillStyle=c; ctx.font='600 9px "IBM Plex Sans KR",sans-serif';
-    ctx.textAlign='center'; ctx.textBaseline='middle';
-    ctx.fillText(P.ab,px,py+.5);
-    if(on || ['warn','risk','bad'].includes(st.key)) tag(px,py+22, Math.round(v)+' dBm', c);
-  }
-
-  // 공유기
-  for(const ap of S.aps){
-    const px=X(ap.x),py=Y(ap.y), on=sel&&sel.t==='ap'&&sel.id===ap.id;
-    ctx.strokeStyle=cssv('accent'); ctx.globalAlpha=.35;
-    for(let k=1;k<=3;k++){ ctx.lineWidth=1.6; ctx.beginPath(); ctx.arc(px,py,7+k*6,-2.6,-0.55); ctx.stroke(); }
-    ctx.globalAlpha=1;
-    ctx.beginPath(); ctx.arc(px,py,on?11:9,0,7);
-    ctx.fillStyle=cssv('accent'); ctx.fill();
-    ctx.lineWidth=2.4; ctx.strokeStyle=cssv('surface'); ctx.stroke();
-    tag(px,py+22, ap.name, cssv('accent'));
-  }
-  updateChips();
-}
-function tag(px,py,text,color){
-  ctx.font='600 10px "IBM Plex Mono",monospace';
-  ctx.textAlign='center'; ctx.textBaseline='middle';
-  const w=ctx.measureText(text).width+10;
-  ctx.fillStyle=cssv('surface'); ctx.globalAlpha=.9;
-  roundRect(px-w/2,py-8,w,16,5); ctx.fill(); ctx.globalAlpha=1;
-  ctx.strokeStyle=color; ctx.lineWidth=1; roundRect(px-w/2,py-8,w,16,5); ctx.stroke();
-  ctx.fillStyle=color; ctx.fillText(text,px,py+.5);
-}
-function roundRect(x,y,w,h,r){
-  ctx.beginPath();
-  ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r);
-  ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath();
-}
-function updateChips(){
-  document.getElementById('chBand').textContent = S.band==='5'?'5 GHz':'2.4 GHz';
-  document.getElementById('lgBandNote').textContent = S.band==='5'?'5 GHz':'2.4 GHz';
-  const A=planArea();
-  document.getElementById('chScale').textContent = `대상 ${A.toFixed(1)}㎡ · ${(A/PYEONG).toFixed(1)}평`;
-  document.getElementById('chCount').textContent = `벽 ${S.walls.length} · 기기 ${S.devs.length}`;
-  document.getElementById('siteName').textContent = S.name;
-  document.getElementById('apCount').textContent = `공유기 ${S.aps.length}대`;
-}
-
-/* ============================================================
-   포인터 조작
-   ============================================================ */
-const pts=new Map();
-let pan=null, pinch=null, dragTarget=null, downAt=null;
-
-function local(e){ const r=cv.getBoundingClientRect(); return {x:e.clientX-r.left, y:e.clientY-r.top}; }
-function hitMarker(p){
-  for(const d of S.devs) if(Math.hypot(X(d.x)-p.x,Y(d.y)-p.y)<15) return {t:'dev',id:d.id,o:d};
-  for(const a of S.aps) if(Math.hypot(X(a.x)-p.x,Y(a.y)-p.y)<16) return {t:'ap',id:a.id,o:a};
-  return null;
-}
-function nearestWall(p,maxPx){
-  let best=null,bd=maxPx;
-  for(const w of S.walls){
-    const d=distToSeg(p.x,p.y,X(w.x1),Y(w.y1),X(w.x2),Y(w.y2));
-    if(d<bd){bd=d;best=w;}
-  }
-  return best;
-}
-function distToSeg(px,py,ax,ay,bx,by){
-  const dx=bx-ax,dy=by-ay,l2=dx*dx+dy*dy;
-  let t=l2?((px-ax)*dx+(py-ay)*dy)/l2:0; t=Math.max(0,Math.min(1,t));
-  return Math.hypot(px-(ax+t*dx),py-(ay+t*dy));
-}
-function snap(p){
-  let x=mx(p.x), y=my(p.y);
-  let bd=0.28, hit=null;
-  for(const w of S.walls){
-    for(const q of [[w.x1,w.y1],[w.x2,w.y2]]){
-      const d=Math.hypot(q[0]-x,q[1]-y);
-      if(d<bd){bd=d;hit=q;}
-    }
-  }
-  if(hit) return {x:hit[0],y:hit[1]};
-  return {x:Math.round(x*20)/20, y:Math.round(y*20)/20};
-}
-
-cv.addEventListener('pointerdown',e=>{
-  cv.setPointerCapture(e.pointerId);
-  const p=local(e); pts.set(e.pointerId,p);
-  if(pts.size===2){
-    const [a,b]=[...pts.values()];
-    pinch={d:Math.hypot(a.x-b.x,a.y-b.y), c:{x:(a.x+b.x)/2,y:(a.y+b.y)/2}, s:view.s, ox:view.ox, oy:view.oy};
-    draft=null; pan=null; dragTarget=null; return;
-  }
-  if(pts.size>2) return;
-  downAt=p;
-  const m=hitMarker(p);
-  if(m){ dragTarget=m; sel={t:m.t,id:m.id}; renderAll(); return; }
-
-  if(mode==='wall'){ const s=snap(p); draft={x1:s.x,y1:s.y,x2:s.x,y2:s.y}; }
-  else if(mode==='scale'){ const s={x:mx(p.x),y:my(p.y)}; draft={x1:s.x,y1:s.y,x2:s.x,y2:s.y}; }
-  else pan={x:p.x,y:p.y,ox:view.ox,oy:view.oy};
-});
-cv.addEventListener('pointermove',e=>{
-  if(!pts.has(e.pointerId)) return;
-  const p=local(e); pts.set(e.pointerId,p);
-  if(pinch && pts.size>=2){
-    const [a,b]=[...pts.values()];
-    const d=Math.hypot(a.x-b.x,a.y-b.y);
-    const k=Math.max(.2,Math.min(12,(d/pinch.d)));
-    const ns=pinch.s*k;
-    view.ox=pinch.c.x-(pinch.c.x-pinch.ox)*(ns/pinch.s);
-    view.oy=pinch.c.y-(pinch.c.y-pinch.oy)*(ns/pinch.s);
-    view.s=ns; userMoved=true; draw(); return;
-  }
-  if(dragTarget){
-    const s=(mode==='wall')?snap(p):{x:mx(p.x),y:my(p.y)};
-    dragTarget.o.x=s.x; dragTarget.o.y=s.y; ghost=null; heatDirty=true;
-    if(dragTarget.t==='ap') S.apTouched=true;              // 공유기를 끌어 놓는 것도 «자리 정함»
-    draw(); return;
-  }
-  if(draft){
-    let s=(mode==='wall')?snap(p):{x:mx(p.x),y:my(p.y)};
-    if(mode==='wall'){
-      const dx=s.x-draft.x1, dy=s.y-draft.y1;
-      if(Math.abs(dx)>Math.abs(dy)*2.2) s.y=draft.y1;
-      else if(Math.abs(dy)>Math.abs(dx)*2.2) s.x=draft.x1;
-    }
-    draft.x2=s.x; draft.y2=s.y; draw(); return;
-  }
-  if(pan){ view.ox=pan.ox+(p.x-pan.x); view.oy=pan.oy+(p.y-pan.y); userMoved=true; draw(); }
-});
-function endPointer(e){
-  const p=pts.get(e.pointerId)||local(e);
-  pts.delete(e.pointerId);
-  if(pts.size<2) pinch=null;
-  if(dragTarget){ dragTarget=null; commit(); return; }
-  if(draft){
-    const L=Math.hypot(draft.x2-draft.x1,draft.y2-draft.y1);
-    if(mode==='wall'){
-      if(L>0.12){ S.walls.push({x1:draft.x1,y1:draft.y1,x2:draft.x2,y2:draft.y2,t:wallType}); }
-      draft=null; commit(); return;
-    }
-    if(mode==='scale'){
-      if(L>0.05){ scaleLine={...draft}; askScale(L); }
-      draft=null; draw(); return;
-    }
-  }
-  const moved = downAt ? Math.hypot(p.x-downAt.x,p.y-downAt.y) : 99;
-  pan=null;
-  if(moved<6) tap(p);
-  downAt=null;
-}
-cv.addEventListener('pointerup',endPointer);
-cv.addEventListener('pointercancel',endPointer);
-
-function tap(p){
-  const world={x:mx(p.x),y:my(p.y)};
-  if(mode==='cal'){ askCalib({x:world.x,y:world.y}); return; }
-  if(mode==='door'){
-    const w=nearestWall(p,20);
-    if(!w) return toast('벽 위를 눌러 주세요');
-    punch(w,world);
-    commit(); return;
-  }
-  if(mode==='ap'){
-    const id='ap'+Date.now().toString(36);
-    const pr=AP_PRESETS.kt6;
-    S.apTouched=true;
-    S.aps.push({id,name:S.aps.length?'중계기 '+S.aps.length:pr.ko,x:world.x,y:world.y,
-                preset:S.aps.length?'ext5g':'kt6',tx:S.band==='5'?pr.p5:pr.p24,gain:pr.gain,
-                enc:0,wired:S.aps.length===0});
-    assignChannels();
-    sel={t:'ap',id}; ghost=null; commit(); return;
-  }
-  if(mode==='dev'){
-    const id='d'+Date.now().toString(36);
-    S.devs.push({id,k:devKind,name:(PROD[devKind]||PROD['wifi.switch']).ko,x:world.x,y:world.y});
-    sel={t:'dev',id}; commit(); return;
-  }
-  if(mode==='erase'){
-    const m=hitMarker(p);
-    if(m){
-      if(m.t==='dev') S.devs=S.devs.filter(d=>d.id!==m.id);
-      else if(S.aps.length>1) S.aps=S.aps.filter(a=>a.id!==m.id);
-      else return toast('공유기는 최소 1대가 필요합니다');
-      sel=null; commit(); return;
-    }
-    const w=nearestWall(p,16);
-    if(w){ S.walls=S.walls.filter(x=>x!==w); commit(); return; }
-    return;
-  }
-  const m=hitMarker(p);
-  sel=m?{t:m.t,id:m.id}:null;
-  renderAll();
-}
-
-// 문·개구부: 벽을 잘라 폭만큼 비우고, 필요하면 문 조각을 끼움
-function punch(w,pt){
-  const dx=w.x2-w.x1, dy=w.y2-w.y1, L=Math.hypot(dx,dy);
-  if(L<0.05) return;
-  let t=((pt.x-w.x1)*dx+(pt.y-w.y1)*dy)/(L*L);
-  const gap = doorKind==='wide'?1.8 : doorKind==='mid'?1.4 : 0.9;
-  const h=gap/(2*L);
-  let t1=t-h, t2=t+h;
-  const P=k=>({x:w.x1+dx*k, y:w.y1+dy*k});
-  const parts=[];
-  if(t1>0.02) parts.push({x1:w.x1,y1:w.y1,...pfx(P(Math.min(t1,1))),t:w.t});
-  if(t2<0.98) parts.push({...pfx2(P(Math.max(t2,0))),x2:w.x2,y2:w.y2,t:w.t});
-  const idx=S.walls.indexOf(w);
-  S.walls.splice(idx,1,...parts);
-  if(doorKind==='door'){
-    const a=P(Math.max(0,Math.min(1,t1))), b=P(Math.max(0,Math.min(1,t2)));
-    S.walls.push({x1:a.x,y1:a.y,x2:b.x,y2:b.y,t:'door'});
-  }
-}
-const pfx = p=>({x2:p.x,y2:p.y});
-const pfx2= p=>({x1:p.x,y1:p.y});
-
-function askCalib(pt){
-  const ap=calAp||S.aps[0];
-  if(!ap) return toast('공유기를 먼저 배치하세요');
-  const d=Math.hypot(pt.x-ap.x, pt.y-ap.y);
-  if(d<1){ toast('공유기에서 1 m 이상 떨어진 지점을 눌러 주세요'); return; }
-  const pred=rssiFromAp(ap,pt.x,pt.y,S.band,S.n,S.fade);
-  openSheet('실측값으로 보정', `
-    <p class="note">완공된 세대나 같은 타입 옆 세대에서 휴대폰 와이파이 분석 앱으로 잰 값을 넣으세요. 그 한 점에 맞도록 <b>경로손실 지수 n</b>을 역산합니다. 벽이 적은 지점보다 <b>방 하나쯤 건너간 지점</b>이 보정에 좋습니다.</p>
-    <div class="sitem"><span><span class="t">현재 모델 예측값</span><span class="d mono">공유기에서 ${d.toFixed(1)} m</span></span><span></span><span class="mono">${Math.round(pred)} dBm</span></div>
-    <div class="field"><label>실제 측정값 (dBm)</label><input type="number" id="cIn" step="1" min="-95" max="-20" value="${Math.round(pred)}"></div>
-    <div class="row"><button class="tbtn pri" id="cOk">보정 적용</button><button class="tbtn" id="cNo">취소</button></div>`);
-  document.getElementById('cOk').onclick=()=>{
-    const m=parseFloat(document.getElementById('cIn').value);
-    if(!isFinite(m)) return;
-    const fixed = (ap.enc||0) + wallLoss(crossed(ap,pt.x,pt.y),S.band) + S.fade;
-    const pl0 = S.band==='5'?46.4:40.0;
-    const n = (eirp(ap) - m - fixed - pl0) / (10*Math.log10(Math.max(1.05,d)));
-    if(!isFinite(n)) return toast('보정할 수 없는 값입니다');
-    S.n = Math.max(1.6, Math.min(4.0, n));
-    document.getElementById('nRange').value=S.n;
-    document.getElementById('nVal').textContent=S.n.toFixed(2);
-    heatDirty=true; calAp=null; mode='ap'; closeSheet(); commit();
-    toast(`경로손실 지수를 ${S.n.toFixed(2)}로 보정했습니다`);
-  };
-  document.getElementById('cNo').onclick=()=>{calAp=null;mode='ap';closeSheet();renderMode();};
-}
-function askScale(measured){
-  openSheet('축척 맞추기', `
-    <p class="note">방금 그은 선의 <b>실제 길이</b>를 입력하세요. 도면 전체가 그 길이에 맞춰 조정됩니다. 거실 폭이나 현관문 폭(보통 0.9 m)처럼 아는 치수를 쓰면 정확합니다.</p>
-    <div class="field"><label>실제 길이 (m)</label><input type="number" id="scIn" step="0.01" min="0.05" value="${measured.toFixed(2)}"></div>
-    <div class="row"><button class="tbtn pri" id="scOk">적용</button><button class="tbtn" id="scNo">취소</button></div>`);
-  document.getElementById('scIn').select?.();
-  document.getElementById('scOk').onclick=()=>{
-    const real=parseFloat(document.getElementById('scIn').value);
-    if(!(real>0.02)) return;
-    const f=real/measured;
-    S.mpp*=f; S.scaled=true;
-    const sc=o=>{o.x*=f;o.y*=f;};
-    for(const w of S.walls){w.x1*=f;w.y1*=f;w.x2*=f;w.y2*=f;}
-    for(const r of S.rooms){r[1]*=f;r[2]*=f;r[3]*=f;r[4]*=f;}
-    S.aps.forEach(sc); S.devs.forEach(sc);
-    scaleLine=null; closeSheet(); fit(); commit();
-    toast('축척을 적용했습니다');
-  };
-  document.getElementById('scNo').onclick=()=>{scaleLine=null;closeSheet();draw();};
-}
-
-cv.addEventListener('wheel',e=>{
-  e.preventDefault();
-  const p=local(e), k=Math.exp(-e.deltaY*0.0016), ns=Math.max(6,Math.min(600,view.s*k));
-  view.ox=p.x-(p.x-view.ox)*(ns/view.s);
-  view.oy=p.y-(p.y-view.oy)*(ns/view.s);
-  view.s=ns; userMoved=true; draw();
-},{passive:false});
-document.getElementById('zIn').onclick=()=>zoomBy(1.25);
-document.getElementById('zOut').onclick=()=>zoomBy(0.8);
-document.getElementById('zFit').onclick=()=>{userMoved=false;fit();draw();};
-function zoomBy(k){
-  userMoved=true;
-  const ns=Math.max(6,Math.min(600,view.s*k));
-  view.ox=CW/2-(CW/2-view.ox)*(ns/view.s);
-  view.oy=CH/2-(CH/2-view.oy)*(ns/view.s);
-  view.s=ns; draw();
-}
-
-/* ============================================================
-   모드 UI
-   ============================================================ */
-const MODES=[
-  {k:'view', ko:'보기',   ic:'M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z|M12 12'},
-  {k:'wall', ko:'벽',     ic:'M3 6h18|M3 12h18|M3 18h18'},
-  {k:'door', ko:'문',     ic:'M4 3h11v18H4z|M11 12h.01'},
-  {k:'ap',   ko:'공유기', ic:'M4 9a12 12 0 0 1 16 0|M7.5 12.5a7 7 0 0 1 9 0|M12 17h.01'},
-  {k:'dev',  ko:'기기',   ic:'M5 4h14v16H5z|M9 20h6'},
-  {k:'erase',ko:'지우개', ic:'M4 16 14 6l5 5-9 9H6z|M3 21h18'},
-];
-const modesEl=document.getElementById('modes');
-modesEl.innerHTML=MODES.map(m=>`<button data-m="${m.k}" aria-pressed="${m.k===mode}">
-  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${m.ic.split('|').map(d=>`<path d="${d}"/>`).join('')}</svg>
-  <span>${m.ko}</span></button>`).join('');
-modesEl.onclick=e=>{
-  const b=e.target.closest('button'); if(!b) return;
-  mode=b.dataset.m; draft=null;
-  [...modesEl.children].forEach(x=>x.setAttribute('aria-pressed', x.dataset.m===mode));
-  renderMode(); draw();
-};
-
-const HINTS={
-  view:'도면을 끌어 이동, 두 손가락으로 확대. 공유기·기기를 끌어 위치를 바꿔 보세요.',
-  wall:'벽 종류를 고르고 도면 위에 선을 그으세요. 가로·세로는 자동으로 맞춰집니다.',
-  door:'벽을 누르면 그 자리에 문·개구부가 뚫립니다. 신호가 지나가는 통로입니다.',
-  ap:'공유기를 놓을 위치를 누르세요. 단자함 안이면 감쇠 항목을 꼭 바꿔 주세요.',
-  dev:'설치할 IoT 기기 종류를 고르고 도면을 누르세요.',
-  erase:'벽·공유기·기기를 눌러 지웁니다.',
-  scale:'도면에서 길이를 아는 구간에 선을 그으세요.',
-  cal:'실제로 신호를 측정한 지점을 도면에서 누르세요. 그 값에 맞춰 감쇠 모델을 보정합니다.',
-};
-let calAp=null;
-
-function renderMode(){
-  document.getElementById('hint').textContent=HINTS[mode];
-  const P=document.getElementById('mpanel');
-  const bandRow=`<div class="row">
-    <div class="field"><label>주파수 대역</label><select id="fBand">
-      <option value="2.4"${S.band==='2.4'?' selected':''}>2.4 GHz — IoT 기기 대부분</option>
-      <option value="5"${S.band==='5'?' selected':''}>5 GHz — 카메라·월패드</option>
-    </select></div>
-  </div>`;
-
-  if(mode==='wall'){
-    P.innerHTML=`<span class="lbl">벽 종류 · 괄호는 ${S.band==='5'?'5':'2.4'} GHz 통과 손실</span>
-      <div class="row">${Object.entries(WT).map(([k,v])=>
-        `<button class="swatchbtn" data-w="${k}" aria-pressed="${k===wallType}"><i style="background:${v.c}"></i>${v.ko} <em>${S.band==='5'?v.a5:v.a24}dB</em></button>`).join('')}</div>
-      <p class="note">아파트 세대 내부는 <b>내력벽 콘크리트</b>와 <b>경량 석고벽</b>이 대부분입니다. 욕실·주방 벽은 타일과 배관 때문에 손실이 더 큽니다.</p>`;
-    P.querySelectorAll('[data-w]').forEach(b=>b.onclick=()=>{
-      wallType=b.dataset.w;
-      P.querySelectorAll('[data-w]').forEach(x=>x.setAttribute('aria-pressed',x.dataset.w===wallType));
-    });
-  }
-  else if(mode==='door'){
-    const D=[['open','개구부 (문 없음)','0.9 m'],['door','목문 (닫힘)','0.9 m'],['mid','중문 · 미닫이','1.4 m'],['wide','대면 개구부','1.8 m']];
-    P.innerHTML=`<span class="lbl">개구부 종류</span><div class="row">${D.map(d=>
-      `<button class="swatchbtn" data-d="${d[0]}" aria-pressed="${d[0]===doorKind}">${d[1]} <em>${d[2]}</em></button>`).join('')}</div>
-      <p class="note">문이 열려 있는 통로는 손실이 거의 없어 신호가 가장 잘 나가는 길입니다. 실제 시공에서 공유기 위치를 정할 때 <b>문 라인이 통하는 방향</b>을 먼저 보세요.</p>`;
-    P.querySelectorAll('[data-d]').forEach(b=>b.onclick=()=>{
-      doorKind=b.dataset.d;
-      P.querySelectorAll('[data-d]').forEach(x=>x.setAttribute('aria-pressed',x.dataset.d===doorKind));
-    });
-  }
-  else if(mode==='ap'){
-    const ap=(sel&&sel.t==='ap'?S.aps.find(a=>a.id===sel.id):null)||S.aps[0];
-    const groups=[...new Set(Object.values(AP_PRESETS).map(x=>x.g))];
-    const pre=ap?(AP_PRESETS[ap.preset]?ap.preset:'custom'):'custom';
-    const hp=ap?apHealth(ap):{ok:true,v:null};
-    const chips=S.aps.length>1?`<span class="lbl">배치된 공유기</span><div class="row"><div class="apchips">${
-      S.aps.map(a=>`<button class="apchip" data-ap="${a.id}" aria-pressed="${ap&&a.id===ap.id}">${esc(a.name)}${a.wired===false?' · 무선':''}</button>`).join('')
-    }</div></div>`:'';
-    P.innerHTML=bandRow+chips+(ap?`
-      <div class="row"><div class="field"><label>공유기 모델</label><select id="fPre">
-        ${groups.map(g=>`<optgroup label="${g}">${Object.entries(AP_PRESETS).filter(([,v])=>v.g===g)
-          .map(([k,v])=>`<option value="${k}"${k===pre?' selected':''}>${v.ko}</option>`).join('')}</optgroup>`).join('')}
-      </select></div></div>
-      <div class="row"><div class="field"><label>표시 이름</label><input type="text" id="fName" value="${esc(ap.name)}"></div></div>
-      <div class="row">
-        <div class="field"><label>송신 출력 <span class="mono" id="txVal">${ap.tx} dBm</span></label>
-          <input type="range" id="fTx" min="10" max="24" step="1" value="${ap.tx}"></div>
-        <div class="field"><label>안테나 이득 <span class="mono" id="gnVal">${ap.gain} dBi</span></label>
-          <input type="range" id="fGn" min="0" max="9" step="1" value="${ap.gain}"></div>
-      </div>
-      <div class="sitem"><span><span class="t">실효 복사전력 EIRP</span>
-        <span class="d">출력 + 안테나 이득 · 국내 비면허 상한 부근</span></span><span></span>
-        <span class="mono" id="eirpVal" style="font-size:16px;font-weight:600">${eirp(ap)} dBm</span></div>
-      <div class="row">
-        <div class="field"><label>설치 상태 (추가 감쇠)</label><select id="fEnc">
-          ${ENC.map(e=>`<option value="${e.v}"${(ap.enc||0)===e.v?' selected':''}>${e.ko} · +${e.v} dB</option>`).join('')}
-        </select></div>
-        <div class="field advonly"><label>연결 방식</label><select id="fWired">
-          <option value="1"${ap.wired!==false?' selected':''}>유선 백홀 (본체·랜선 연결)</option>
-          <option value="0"${ap.wired===false?' selected':''}>무선 중계 (공유기 신호로 중계)</option>
-        </select></div>
-      </div>
-      ${ap.wired===false?`<div class="sitem" style="border-color:var(--${hp.ok?'good':'bad'})">
-        <span><span class="t">중계기 자리 수신</span><span class="d">본체에서 ${BACKHAUL_TH} dBm 이상 받아야 제 역할을 합니다</span></span><span></span>
-        <span class="mono" style="font-weight:600;color:var(--${hp.ok?'good':'bad'})">${Math.round(hp.v)} dBm</span></div>`:''}
-      <div class="sitem advonly"><span><span class="t">배정 채널</span><span class="d">${S.band==='5'?'5 GHz':'2.4 GHz는 1·6·11만 안 겹칩니다'}</span></span><span></span>
-        <span class="mono" style="font-weight:600">${(S.band==='5'?ap.ch5:ap.ch24)||'—'} ch</span></div>
-      <div class="row">
-        <button class="actbtn" id="btnBest">최적 위치 찾기</button>
-        <button class="actbtn" id="btnAuto">공유기 대수 자동 설계</button>
-        <button class="actbtn advonly" id="btnCh" style="border-color:var(--line);background:var(--sunk);color:var(--ink2)">채널 재배정</button>
-        <button class="actbtn advonly" id="btnCal" style="border-color:var(--line);background:var(--sunk);color:var(--ink2)">실측값으로 보정</button>
-      </div>
-      <p class="note advonly">${AP_PRESETS[pre].hint?`<b>${esc(AP_PRESETS[pre].hint)}.</b> `:''}모델별 수치는 <b>카테고리 대표 추정값</b>입니다 — 국내 공유기 제조사는 EIRP를 공개하지 않고, 규제 때문에 실사용 범위가 2.4 GHz 기준 17~23 dBm으로 좁습니다. 정확한 값이 필요하면 국립전파연구원 적합성평가 인증정보에서 모델별 <b>공중선전력</b>을 조회하거나, 완공 현장에서 한 지점을 재고 <b>실측값으로 보정</b>을 쓰세요. 모델 차이(±3 dB)보다 <b>설치 위치(±20 dB)</b>가 압도적으로 큽니다.</p>`:'');
-    bindAp(ap);
-  }
-  else if(mode==='dev'){
-    if(!PROD[devKind]) devKind='wifi.switch';
-    const gs=[...new Set(Object.values(PROD).map(x=>x.g))];
-    const cur=PROD[devKind];
-    const ROLE={hub:'허브 · 코디네이터', router:'상시전원 · 메시 중계 가능', end:'말단 · 중계 불가'};
-    P.innerHTML=`<span class="lbl">설치할 제품</span>
-      <div class="row"><div class="field"><select id="dvK">
-        ${gs.map(g=>`<optgroup label="${esc(g)}">${Object.entries(PROD).filter(([,v])=>v.g===g)
-          .map(([k,v])=>`<option value="${k}"${k===devKind?' selected':''}>${esc(v.ko)}</option>`).join('')}</optgroup>`).join('')}
-      </select></div></div>
-      <div class="sitem"><span><span class="t">${esc(RADIO[cur.radio]?RADIO[cur.radio].ko:cur.radio)} · ${ROLE[cur.role]||cur.role}</span>
-        <span class="d">${cur.note?esc(cur.note):'송신 '+cur.tx+' dBm · 권장 수신 '+cur.req+' dBm'}</span></span><span></span>
-        <span class="mono" style="font-weight:600;color:${RADIO[cur.radio]?RADIO[cur.radio].c:'var(--ink)'}">${cur.req} dBm</span></div>
-      <div class="row advonly">
-        <button class="tbtn" id="pAdd">제품 직접 추가</button>
-        <button class="tbtn" id="pImp">목록 CSV 가져오기</button>
-        <button class="tbtn" id="pExp">CSV 내보내기</button>
-        <input type="file" id="pFile" accept=".csv,text/csv" hidden>
-      </div>
-      <p class="note"><b>Zigbee 제품은 허브를 먼저 놓아야</b> 계산됩니다. 상시전원 기기(플러그·중성선 스위치·릴레이)만 중계를 하고, 배터리 센서는 중계를 못 합니다 — 그래서 배터리 센서만 잔뜩 깔면 메시가 안 이어집니다.<br>수치는 통신 방식·전원 방식별 <b>표준 계급값</b>이며 모델별 실측치가 아닙니다. 같은 브랜드에도 WiFi판과 Zigbee판이 따로 있으니 실제 구매 모델 규격을 확인하세요.</p>`;
-    document.getElementById('dvK').onchange=e=>{devKind=e.target.value; renderMode();};
-    document.getElementById('pAdd').onclick=openAddProduct;
-    document.getElementById('pExp').onclick=exportProducts;
-    document.getElementById('pImp').onclick=()=>document.getElementById('pFile').click();
-    document.getElementById('pFile').onchange=e=>importProducts(e.target.files[0]);
-  }
-  else if(mode==='erase'){
-    P.innerHTML=`<p class="note">지울 대상을 도면에서 누르세요. 벽은 선 위를, 공유기·기기는 아이콘을 누르면 됩니다.</p>
-      <div class="row"><button class="tbtn" id="clrWalls">벽 전체 지우기</button><button class="tbtn" id="clrDevs">기기 전체 지우기</button></div>`;
-    document.getElementById('clrWalls').onclick=()=>{ if(confirm('벽을 모두 지울까요?')){S.walls=[];commit();} };
-    document.getElementById('clrDevs').onclick=()=>{ if(confirm('기기를 모두 지울까요?')){S.devs=[];sel=null;commit();} };
-  }
-  else if(mode==='cal'){
-    P.innerHTML=`<p class="note">실제로 측정한 지점을 도면에서 누르세요. 한 점만 맞춰도 그 현장의 벽 두께·마감 특성이 모델 전체에 반영됩니다.</p>
-      <div class="row"><button class="tbtn" id="calNo">취소</button></div>`;
-    document.getElementById('calNo').onclick=()=>{calAp=null;mode='ap';renderMode();draw();};
-  }
-  else{
-    P.innerHTML=bandRow+`
-      <span class="lbl">도면</span>
-      <div class="row">
-        <button class="tbtn" id="btnUp">도면 올리기 (JPG·PNG·PDF)</button>
-        <button class="tbtn" id="btnScale">축척 맞추기</button>
-        ${S.bg?'<button class="tbtn" id="btnTrace">벽 다시 인식</button><button class="tbtn" id="btnRmBg">이미지 제거</button>':''}
-        <button class="tbtn" id="btnSample">샘플 도면 불러오기</button>
-      </div>
-      <input type="file" id="fileIn" accept="image/*,application/pdf" hidden>
-      <p class="note">아파트 도면(JPG·PNG·PDF)을 올린 뒤 <b>축척</b>으로 실제 치수를 한 번 맞추고, <b>벽</b> 모드에서 도면 선을 따라 벽을 그으면 됩니다. 도면이 없으면 샘플 평면에서 바로 실험해 보세요.</p>`;
-    document.getElementById('btnUp').onclick=()=>document.getElementById('fileIn').click();
-    document.getElementById('fileIn').onchange=e=>loadPlan(e.target.files[0]);
-    document.getElementById('btnScale').onclick=()=>{mode='scale';renderMode();document.getElementById('hint').textContent=HINTS.scale;};
-    document.getElementById('btnSample').onclick=()=>{ if(confirm('현재 작업을 버리고 샘플을 불러올까요?')){S=sampleState();sel=null;ghost=null;fit();commit();} };
-    const rb=document.getElementById('btnRmBg'); if(rb) rb.onclick=()=>{S.bg=null;commit();};
-    const tb=document.getElementById('btnTrace'); if(tb) tb.onclick=()=>{
-      if(S.walls.length&&!confirm('지금 그려진 벽을 모두 지우고 도면에서 다시 인식할까요?')) return;
-      const cc=document.createElement('canvas'); cc.width=S.bg.w; cc.height=S.bg.h;
-      cc.getContext('2d').drawImage(S.bg.img,0,0,S.bg.w,S.bg.h);
-      const n=autoTraceWalls(cc);
-      commit();
-      toast(n?`벽 ${n}개를 다시 인식했습니다`:'벽을 자동 인식하지 못했습니다 — 벽 모드에서 직접 그려 주세요');
-    };
-  }
-  P.querySelectorAll('#fBand').forEach(s=>s.onchange=()=>{
-    S.band=s.value;
-    S.aps.forEach(a=>{ const pr=AP_PRESETS[a.preset]; if(pr&&a.preset!=='custom'){ a.tx=S.band==='5'?pr.p5:pr.p24; a.gain=pr.gain; } });
-    heatDirty=true; commit(); renderMode();
-  });
-}
-function bindAp(ap){
-  if(!ap) return;
-  const $=id=>document.getElementById(id);
-  const sync=()=>{ $('txVal').textContent=ap.tx+' dBm'; $('gnVal').textContent=ap.gain+' dBi'; $('eirpVal').textContent=eirp(ap)+' dBm'; };
-  if($('fPre')) $('fPre').onchange=e=>{
-    const k=e.target.value, pr=AP_PRESETS[k];
-    ap.preset=k;
-    if(k!=='custom'){ ap.tx=S.band==='5'?pr.p5:pr.p24; ap.gain=pr.gain; if(!ap._named) ap.name=pr.ko; }
-    heatDirty=true; commit(); renderMode();
-  };
-  if($('fName')) $('fName').oninput=e=>{ap.name=e.target.value; ap._named=true; draw(); saveLocal();};
-  if($('fTx')) $('fTx').oninput=e=>{ap.tx=+e.target.value; ap.preset='custom'; heatDirty=true; sync(); commit(true); renderList(); renderAdvice();};
-  if($('fGn')) $('fGn').oninput=e=>{ap.gain=+e.target.value; ap.preset='custom'; heatDirty=true; sync(); commit(true); renderList(); renderAdvice();};
-  if($('fEnc')) $('fEnc').onchange=e=>{ap.enc=+e.target.value; heatDirty=true; commit();};
-  document.querySelectorAll('[data-ap]').forEach(b=>b.onclick=()=>{ sel={t:'ap',id:b.dataset.ap}; renderAll(); });
-  if($('fWired')) $('fWired').onchange=e=>{ap.wired=e.target.value==='1'; heatDirty=true; commit();};
-  if($('btnBest')) $('btnBest').onclick=()=>findBest(ap);
-  if($('btnAuto')) $('btnAuto').onclick=()=>openAutoDesign();
-  if($('btnCh')) $('btnCh').onclick=()=>{assignChannels(); commit(); toast('채널을 다시 배정했습니다');};
-  if($('btnCal')) $('btnCal').onclick=()=>{ calAp=ap; mode='cal'; renderMode(); toast('실제로 측정한 지점을 도면에서 누르세요'); };
-}
-const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-
-/* ============================================================
-   최적 위치 탐색
-   ============================================================ */
-function scoreAt(ap,x,y){
-  const saveX=ap.x, saveY=ap.y; ap.x=x; ap.y=y;
-  let worst=999;
-  for(const d of S.devs){
-    if(netOf(d)!=='wifi') continue;
-    worst=Math.min(worst, linkOf(d).eff - PROD[d.k].req);
-  }
-  ap.x=saveX; ap.y=saveY;
-  return worst;
-}
-function findBest(ap){
-  if(!S.devs.length) return toast('먼저 IoT 기기를 배치해 주세요');
-  const b=bbox(), step=Math.max(0.25, Math.max(b.w,b.h)/45);
-  let best=null;
-  for(let y=b.y+step;y<b.y+b.h;y+=step){
-    for(let x=b.x+step;x<b.x+b.w;x+=step){
-      let near=false;
-      for(const w of S.walls){ if(distToSegM(x,y,w)<0.22){near=true;break;} }
-      if(near) continue;
-      const s=scoreAt(ap,x,y);
-      if(!best||s>best.s) best={x,y,s};
-    }
-  }
-  if(!best) return toast('추천 위치를 찾지 못했습니다');
-  const cur=scoreAt(ap,ap.x,ap.y);
-  ghost={x:best.x,y:best.y,gain:best.s-cur};
-  draw(); renderAdvice();
-  toast(`최약 기기 여유가 ${(best.s-cur)>=0?'+':''}${(best.s-cur).toFixed(1)} dB 좋아집니다`);
-}
-// 중계기 한 대를 놓을 최적 지점: 본체 신호를 충분히 받으면서 최약 기기를 가장 많이 살리는 자리
-function bestRepeaterSpot(){
-  const b=bbox(), step=Math.max(0.25, Math.max(b.w,b.h)/40);
-  const pr=AP_PRESETS.ext5g;
-  const tmp={id:'__tmp', name:'tmp', x:0, y:0, preset:'ext5g',
-             tx:S.band==='5'?pr.p5:pr.p24, gain:pr.gain, enc:0, wired:false};
-  let best=null;
-  S.aps.push(tmp);
-  for(let y=b.y+step;y<b.y+b.h;y+=step){
-    for(let x=b.x+step;x<b.x+b.w;x+=step){
-      let near=false;
-      for(const w of S.walls){ if(distToSegM(x,y,w)<0.25){near=true;break;} }
-      if(near) continue;
-      tmp.x=-9999; tmp.y=-9999;
-      if(parentRssi(x,y,'__tmp') < BACKHAUL_TH) continue;   // 중계기 자리가 이미 약하면 소용없다
-      tmp.x=x; tmp.y=y;
-      let worst=999;
-      for(const d of S.devs){ if(netOf(d)!=='wifi') continue; worst=Math.min(worst, linkOf(d).eff - PROD[d.k].req); }
-      if(!best||worst>best.s) best={x,y,s:worst};
-    }
-  }
-  S.aps=S.aps.filter(a=>a.id!=='__tmp');
-  return best;
-}
-/* 실내 전 구역을 목표 세기 이상으로 덮는 데 필요한 장비 수와 위치를 찾는다.
-   실내 격자점(가중치 1)과 배치된 IoT 기기(가중치 4)를 한 집합으로 놓고 그리디로 채운다. */
-function autoDesign(opt){
-  const tg=opt.target, useWired=opt.wired, maxAdd=opt.max, moveMain=opt.moveMain;
-  S.covTarget=tg;
-  const cands=candidateSpots();
-  if(!cands.length) return null;
-  const main=S.aps.find(a=>a.wired!==false)||S.aps[0];
-  const snap=JSON.parse(JSON.stringify(S.aps));
-  const before=coverageStats(tg,'wifi');
-  const wifiDevs=()=>S.devs.filter(d=>netOf(d)==='wifi');
-  const beforeBad=wifiDevs().filter(d=>['warn','risk','bad'].includes(devStatus(linkOf(d).eff,PROD[d.k].req).key)).length;
-
-  const T=coarseCells().map(p=>({x:p.x,y:p.y,req:tg,w:1,dev:null}))
-    .concat(S.devs.filter(d=>netOf(d)==='wifi').map(d=>({x:d.x,y:d.y,req:PROD[d.k].req,w:4,dev:d})));
-  const ok=t=>(t.dev?linkOf(t.dev).eff:rssiAt(t.x,t.y))>=t.req;
-
-  let moved=null;
-  if(moveMain && main){
-    const ox=main.x, oy=main.y;
-    let best=null;
-    for(const c of cands){
-      main.x=c.x; main.y=c.y;
-      let sc=0; for(const t of T) if(ok(t)) sc+=t.w;
-      if(!best||sc>best.sc) best={x:c.x,y:c.y,sc};
-    }
-    if(best && Math.hypot(best.x-ox,best.y-oy)>0.4){ main.x=best.x; main.y=best.y; moved={from:[ox,oy],to:[best.x,best.y]}; }
-    else { main.x=ox; main.y=oy; }
-  }
-
-  const pr=AP_PRESETS[useWired?'ceil':'ext5g'];
-  const added=[];
-  for(let n=0;n<maxAdd;n++){
-    const rest=T.filter(t=>!ok(t));
-    if(!rest.length) break;
-    const tmp={id:'__t',name:'t',x:-99999,y:-99999,preset:useWired?'ceil':'ext5g',
-               tx:S.band==='5'?pr.p5:pr.p24,gain:pr.gain,enc:0,wired:useWired};
-    S.aps.push(tmp);
-    let best=null;
-    for(const c of cands){
-      tmp.x=-99999; tmp.y=-99999;
-      if(!useWired && parentRssi(c.x,c.y,'__t')<BACKHAUL_TH) continue;  // 무선 중계는 자리부터 받아야 한다
-      tmp.x=c.x; tmp.y=c.y;
-      let sc=0; for(const t of rest) if(ok(t)) sc+=t.w;
-      if(!best||sc>best.sc) best={x:c.x,y:c.y,sc};
-    }
-    S.aps=S.aps.filter(a=>a.id!=='__t');
-    if(!best||best.sc<=0) break;
-    const ap={id:'ap'+Date.now().toString(36)+n, name:(useWired?'추가 AP ':'중계기 ')+(added.length+1),
-              x:best.x, y:best.y, preset:useWired?'ceil':'ext5g',
-              tx:S.band==='5'?pr.p5:pr.p24, gain:pr.gain, enc:0, wired:useWired};
-    S.aps.push(ap); added.push(ap);
-  }
-  assignChannels();
-  const after=coverageStats(tg,'wifi');
-  const afterBad=wifiDevs().filter(d=>['warn','risk','bad'].includes(devStatus(linkOf(d).eff,PROD[d.k].req).key)).length;
-  return {snap, before, after, beforeBad, afterBad, added, moved, target:tg, main};
-}
-
-function openAddProduct(){
-  openSheet('제품 직접 추가', `
-    <div class="row" style="gap:10px">
-      <div class="field"><label>제품명</label><input type="text" id="npKo" placeholder="예: 아카라 벽스위치 T1"></div>
-      <div class="field"><label>브랜드 · 분류</label><input type="text" id="npG" value="내 제품"></div>
-    </div>
-    <div class="row" style="gap:10px">
-      <div class="field"><label>통신 방식</label><select id="npR">
-        ${Object.entries(RADIO).map(([k,v])=>`<option value="${k}">${v.ko}</option>`).join('')}
-      </select></div>
-      <div class="field"><label>전원 · 역할</label><select id="npRole">
-        <option value="end">배터리 · 말단 (중계 불가)</option>
-        <option value="router">상시전원 · 메시 중계 가능</option>
-        <option value="hub">허브 · 코디네이터</option>
-      </select></div>
-    </div>
-    <div class="row" style="gap:10px">
-      <div class="field"><label>송신 출력 (dBm)</label><input type="number" id="npTx" value="17" step="1" min="-5" max="24"></div>
-      <div class="field"><label>권장 최소 수신 (dBm)</label><input type="number" id="npReq" value="-70" step="1" min="-95" max="-40"></div>
-      <div class="field"><label>도면 표시 (1~2자)</label><input type="text" id="npAb" value="스" maxlength="2"></div>
-    </div>
-    <p class="note">Zigbee 배터리 센서는 보통 송신 <b>+4 dBm</b> · 권장 수신 <b>−80 dBm</b>, 상시전원 Zigbee는 <b>+9 / −80</b>, WiFi 기기는 <b>+17 / −70</b> 근처입니다. 제품 설명서에 출력이 적혀 있으면 그 값을 쓰세요.</p>
-    <div class="row"><button class="tbtn pri" id="npOk">추가</button><button class="tbtn" id="npNo">취소</button></div>`);
-  document.getElementById('npNo').onclick=closeSheet;
-  document.getElementById('npOk').onclick=()=>{
-    const ko=document.getElementById('npKo').value.trim();
-    if(!ko) return toast('제품명을 입력하세요');
-    const key='my.'+Date.now().toString(36);
-    S.custom=S.custom||{};
-    S.custom[key]={g:document.getElementById('npG').value.trim()||'내 제품', ko,
-      radio:document.getElementById('npR').value, role:document.getElementById('npRole').value,
-      tx:+document.getElementById('npTx').value, req:+document.getElementById('npReq').value,
-      ab:(document.getElementById('npAb').value||'新').slice(0,2)};
-    syncProd(); devKind=key; closeSheet(); commit(); toast('제품을 추가했습니다');
-  };
-}
-function exportProducts(){
-  const q=v=>`"${String(v).replace(/"/g,'""')}"`;
-  const L=[['키','분류','제품명','통신방식','역할','송신출력dBm','권장수신dBm','표시']];
-  for(const [k,v] of Object.entries(PROD)) L.push([k,v.g,v.ko,v.radio,v.role,v.tx,v.req,v.ab]);
-  saveFile('IoT_제품목록.csv','\ufeff'+L.map(r=>r.map(q).join(',')).join('\r\n'),'text/csv;charset=utf-8');
-}
-function importProducts(file){
-  if(!file) return;
-  const rd=new FileReader();
-  rd.onload=()=>{
-    try{
-      const txt=String(rd.result).replace(/^\ufeff/,'');
-      const rows=txt.split(/\r?\n/).filter(l=>l.trim());
-      let n=0; S.custom=S.custom||{};
-      for(const line of rows){
-        const c=line.match(/("([^"]|"")*"|[^,]*)/g).filter((_,i)=>i%2===0)
-                    .map(x=>x.replace(/^"|"$/g,'').replace(/""/g,'').trim());
-        if(c.length<7) continue;
-        if(/^키$|^key$/i.test(c[0])) continue;
-        const radio=['wifi24','zigbee','thread'].includes(c[3])?c[3]:'wifi24';
-        const role=['hub','router','end'].includes(c[4])?c[4]:'end';
-        const tx=parseFloat(c[5]), req=parseFloat(c[6]);
-        if(!c[2]||!isFinite(tx)||!isFinite(req)) continue;
-        const key=(c[0]&&!PROD_BASE[c[0]])?c[0]:('my.'+Date.now().toString(36)+n);
-        S.custom[key]={g:c[1]||'가져온 제품', ko:c[2], radio, role, tx, req, ab:(c[7]||'新').slice(0,2)};
-        n++;
-      }
-      syncProd(); commit();
-      toast(n?`제품 ${n}개를 불러왔습니다`:'읽을 수 있는 행이 없습니다');
-      renderMode();
-    }catch(e){ toast('CSV를 읽지 못했습니다 — 내보내기 파일 형식을 맞춰 주세요'); }
-  };
-  rd.readAsText(file,'utf-8');
-}
-function openAutoDesign(){
-  const A=planArea();
-  openSheet('공유기 대수 자동 설계', `
-    <div class="sitem"><span><span class="t">커버 대상 면적</span><span class="d">${ensureGrid().leaked?'⚠ 외곽선이 닫히지 않아 도면 전체를 대상으로 합니다 — 외벽을 이어 그려 주세요':'도면 외곽 안쪽을 자동 인식했습니다 (벽체 포함 · 전용면적과 다릅니다)'}</span></span><span></span>
-      <span class="mono" style="font-size:16px;font-weight:600">${A.toFixed(1)} ㎡ · ${(A/PYEONG).toFixed(1)}평</span></div>
-    <div class="row" style="gap:10px">
-      <div class="field"><label>목표 세기 (실내 전 구역)</label><select id="adT">
-        <option value="-65">−65 dBm · 여유 있게</option>
-        <option value="-70" selected>−70 dBm · 표준 (IoT 기준)</option>
-        <option value="-75">−75 dBm · 최소</option>
-      </select></div>
-      <div class="field"><label>추가할 장비</label><select id="adW">
-        <option value="0" selected>무선 중계기 (랜선 없이)</option>
-        <option value="1">유선 AP (랜선 포설)</option>
-      </select></div>
-    </div>
-    <div class="row" style="gap:10px">
-      <div class="field"><label>본체 공유기</label><select id="adM">
-        <option value="0" selected>현재 위치 고정 (인터넷 인입)</option>
-        <option value="1">위치도 함께 최적화</option>
-      </select></div>
-      <div class="field"><label>최대 추가 대수</label><select id="adN">
-        <option value="1">1대까지</option><option value="2" selected>2대까지</option>
-        <option value="3">3대까지</option><option value="4">4대까지</option>
-      </select></div>
-    </div>
-    <p class="note">실내를 격자로 훑어 <b>목표 세기에 못 미치는 구역</b>을 가장 많이 줄이는 자리부터 장비를 채웁니다. 무선 중계기는 본체에서 ${BACKHAUL_TH} dBm 이상 받는 자리만 후보로 씁니다 — 그 아래면 중계기를 놔도 소용이 없습니다.</p>
-    <div class="row"><button class="tbtn pri" id="adGo">설계 실행</button><button class="tbtn" id="adNo">취소</button></div>`);
-  document.getElementById('adNo').onclick=closeSheet;
-  document.getElementById('adGo').onclick=()=>{
-    const opt={target:+document.getElementById('adT').value,
-               wired:document.getElementById('adW').value==='1',
-               moveMain:document.getElementById('adM').value==='1',
-               max:+document.getElementById('adN').value};
-    document.getElementById('adGo').textContent='계산 중…';
-    setTimeout(()=>{
-      const R=autoDesign(opt);
-      if(!R){ closeSheet(); return toast('도면에 벽을 먼저 그려 주세요'); }
-      heatDirty=true; ghost=null; commit();
-      showDesignResult(R);
-    },30);
-  };
-}
-
-function showDesignResult(R){
-  const A=R.after.areaIn, wired=R.added.length&&R.added[0].wired;
-  const rows=S.aps.map(a=>{
-    const hp=apHealth(a), rm=roomAt(a.x,a.y);
-    const ch=(S.band==='5'?a.ch5:a.ch24)||'—';
-    const where=(rm?rm+' · ':'')+`X ${a.x.toFixed(1)} · Y ${a.y.toFixed(1)} m`;
-    const link=a.wired===false?`무선 중계 · 자리 수신 ${Math.round(hp.v)} dBm${hp.ok?'':' (부족)'}`:'유선';
-    return `<div class="sitem"><span><span class="t">${esc(a.name)}</span><span class="d">${where} · ${link}</span></span><span></span>
-      <span class="mono" style="font-weight:600${hp.ok?'':';color:var(--bad)'}">${ch}ch</span></div>`;
-  }).join('');
-  const gain=R.after.pct-R.before.pct;
-  const done=R.after.pct>=99.5;
-  openSheet('설계 결과', `
-    <div class="sitem" style="border-color:var(--${done?'good':(R.after.pct>=95?'warn':'bad')})">
-      <span><span class="t">권장 구성</span><span class="d">대상 ${A.toFixed(1)} ㎡ · ${(A/PYEONG).toFixed(1)}평 · 목표 ${R.target} dBm</span></span><span></span>
-      <span class="mono" style="font-size:17px;font-weight:600">공유기 ${S.aps.length}대</span></div>
-    <div class="sitem"><span><span class="t">커버리지</span><span class="d">목표 세기 이상인 면적 비율</span></span><span></span>
-      <span class="mono" style="font-weight:600">${R.before.pct.toFixed(1)}% → <b style="color:var(--${done?'good':'warn'})">${R.after.pct.toFixed(1)}%</b></span></div>
-    <div class="sitem"><span><span class="t">미달 면적</span><span class="d">${done?'남은 사각지대가 없습니다':'아래 히트맵 <b>미달 구역</b> 탭에서 위치를 확인하세요'}</span></span><span></span>
-      <span class="mono" style="font-weight:600">${R.before.areaBad.toFixed(1)} → ${R.after.areaBad.toFixed(1)} ㎡</span></div>
-    ${S.devs.length?`<div class="sitem"><span><span class="t">문제 기기</span><span class="d">주의 이상 판정</span></span><span></span>
-      <span class="mono" style="font-weight:600">${R.beforeBad} → <b style="color:var(--${R.afterBad?'risk':'good'})">${R.afterBad}</b>대</span></div>`:''}
-    ${R.moved?`<p class="note">본체 공유기를 <span class="mono">X ${R.moved.to[0].toFixed(1)} · Y ${R.moved.to[1].toFixed(1)}</span>로 옮겼습니다. 인터넷 인입 위치 때문에 못 옮기는 자리면 되돌린 뒤 <b>본체 고정</b>으로 다시 돌리세요.</p>`:''}
-    <span class="lbl">장비 배치</span>
-    ${rows}
-    ${!done?`<p class="note">장비를 더 세워도 ${R.after.pct.toFixed(1)}% 이상 올라가지 않았습니다. 남은 구역은 <b>내력벽에 완전히 가려진 자리</b>일 가능성이 큽니다 — 그 방 안쪽에 유선 AP를 한 대 넣는 게 확실합니다.`:''}
-    ${wired?`<p class="note">유선 AP는 랜선 포설이 필요합니다. 소요 길이는 오른쪽 <b>설계 산출서</b>에 나옵니다.</p>`:''}
-    <div class="row"><button class="tbtn pri" id="drOk">이대로 적용</button><button class="tbtn" id="drUndo">되돌리기</button></div>`);
-  document.getElementById('drOk').onclick=()=>{
-    closeSheet();
-    if(!done){ S.view='gap'; heatDirty=true; applySimple(); paintNetTabs(); paintViewTabs(); paintLegend(); draw(); toast('남은 미달 구역을 표시했습니다'); }
-    else toast('설계를 적용했습니다 — 사각지대 없음');
-  };
-  document.getElementById('drUndo').onclick=()=>{
-    S.aps=JSON.parse(JSON.stringify(R.snap));
-    heatDirty=true; closeSheet(); commit(); toast('되돌렸습니다');
-  };
-}
-
-function autoPlan(){
-  if(!S.devs.length) return toast('먼저 IoT 기기를 배치해 주세요');
-  const failing=()=>S.devs.filter(d=>netOf(d)==='wifi'&&['warn','risk','bad'].includes(devStatus(linkOf(d).eff,PROD[d.k].req).key));
-  const before=failing().length;
-  const added=[];
-  for(let i=0;i<3;i++){
-    if(!failing().length) break;
-    const spot=bestRepeaterSpot();
-    if(!spot) break;
-    const prevWorst=Math.min(...S.devs.map(d=>linkOf(d).eff-PROD[d.k].req));
-    if(spot.s <= prevWorst+1.0) break;                     // 더 나아지지 않으면 그만 세운다
-    const pr=AP_PRESETS.ext5g;
-    S.aps.push({id:'ap'+Date.now().toString(36)+i, name:'중계기 '+(added.length+1),
-                x:spot.x, y:spot.y, preset:'ext5g', tx:S.band==='5'?pr.p5:pr.p24,
-                gain:pr.gain, enc:0, wired:false});
-    added.push(spot);
-  }
-  assignChannels(); ghost=null; heatDirty=true; commit();
-  const after=failing().length;
-  if(!added.length){
-    toast(before? '중계기를 더 세워도 개선되지 않습니다 — 공유기 위치부터 옮겨 보세요' : '이미 전 기기가 기준을 넘습니다');
-  } else {
-    toast(`중계기 ${added.length}대 배치 — 문제 기기 ${before} → ${after}대`);
-  }
-}
-function distToSegM(px,py,w){
-  const dx=w.x2-w.x1,dy=w.y2-w.y1,l2=dx*dx+dy*dy;
-  let t=l2?((px-w.x1)*dx+(py-w.y1)*dy)/l2:0; t=Math.max(0,Math.min(1,t));
-  return Math.hypot(px-(w.x1+t*dx),py-(w.y1+t*dy));
-}
-
-/* ============================================================
-   진단 렌더
-   ============================================================ */
-function applySimple(){
-  document.body.classList.toggle('simple', !!S.simple);
-  const b=document.getElementById('btnModeTxt');
-  if(b) b.textContent = S.simple?'간단':'상세';
-}
-function renderAll(){ syncProd(); applySimple(); draw(); paintNetTabs(); renderList(); renderAdvice(); renderBom(); renderMode(); renderGuide(); }
-
-/* 다음 할 일 — 상태를 보고 지금 해야 할 «한 가지»를 짚어준다.
-   불친절하다는 피드백에서 나온 것: 도면을 올린 뒤 뭘 해야 하는지 아무도 안 알려줬다. */
-function renderGuide(){
-  const el=document.getElementById('guide'); if(!el) return;
-  const hasPlan=!!S.bg||S.walls.length>0;
-  const steps=[
-    {ko:'도면 올리기',  done:hasPlan,
-     desc:'아파트 도면 사진(JPG·PNG·PDF)을 올리면 벽이 자동으로 그려집니다.',
-     act:'도면 올리기', go(){ mode='view'; renderMode(); const f=document.getElementById('fileIn'); if(f) f.click(); }},
-    {ko:'축척 맞추기',  done:S.scaled,
-     desc:'길이를 아는 곳에 선을 하나 그으세요 — 현관문 폭 0.9 m가 제일 쉽습니다. 면적·거리가 실제 치수로 맞춰집니다.',
-     act:'선 긋기 시작', go(){ mode='scale'; renderMode(); document.getElementById('hint').textContent=HINTS.scale; draw(); }},
-    {ko:'공유기 자리',  done:!!(S.apTouched&&S.aps.length),
-     desc:'공유기가 있는(있을) 자리를 도면에서 누르거나 끌어다 놓으세요. 보통 거실 TV장 또는 현관 단자함입니다.',
-     act:'공유기 놓기', go(){ mode='ap'; renderMode(); draw(); }},
-    {ko:'기기 배치',    done:S.devs.length>0,
-     desc:'설치할 IoT 제품을 골라 자리마다 찍으세요. 자리별로 신호가 닿는지 바로 계산됩니다.',
-     act:'기기 놓기', go(){ mode='dev'; renderMode(); draw(); }},
-  ];
-  const cur=steps.findIndex(s=>!s.done);
-  let html='<div class="gtitle">'+(cur<0?'설계 완료':'다음 할 일')+'</div>';
-  steps.forEach((s,i)=>{
-    const cls=s.done?'done':(i===cur?'cur':'todo');
-    html+=`<button class="gstep ${cls}" data-g="${i}">
-      <span class="gn">${s.done?'✓':i+1}</span><span>${s.ko}</span></button>`;
-    if(i===cur) html+=`<div class="gdesc">${s.desc}</div><div class="gact"><button class="actbtn" data-ga="${i}">${s.act}</button></div>`;
-  });
-  if(cur<0){
-    const cs=coverageStats(null,'wifi');
-    const bad=S.devs.filter(d=>['warn','risk','bad'].includes(devStatus(linkOf(d).eff,PROD[d.k].req).key)).length;
-    html+=`<div class="gdesc gdone" style="margin-left:0">${
-      bad?`<b style="color:var(--bad)">신호가 약한 기기가 ${bad}대</b> 있습니다. 오른쪽 목록에서 확인하세요.`
-          :'모든 기기에 신호가 닿습니다.'}
-      ${cs.pct<97?' 빨간 <b>미달 구역</b>이 남으면 자동 설계로 채울 수 있습니다.':''}</div>
-      <div class="gact" style="margin-left:0"><button class="actbtn" id="gAuto">공유기 대수 자동 설계</button></div>`;
-  }
-  el.innerHTML=html;
-  el.querySelectorAll('[data-g]').forEach(b=>b.onclick=()=>steps[+b.dataset.g].go());
-  el.querySelectorAll('[data-ga]').forEach(b=>b.onclick=e=>{e.stopPropagation();steps[+b.dataset.ga].go();});
-  const ga=document.getElementById('gAuto'); if(ga) ga.onclick=()=>openAutoDesign();
-}
-
-function renderList(){
-  const el=document.getElementById('devlist');
-  if(!S.devs.length){ el.innerHTML='<p class="emptylist">기기 모드에서 도면을 눌러<br>설치할 IoT 기기를 배치하세요.</p>'; }
-  else{
-    const rows=S.devs.map(d=>{
-      const L=linkOf(d), v=L.eff, dn=L.dn, up=L.up, ap=L.ap;
-      const P=PROD[d.k]||PROD['wifi.switch'];
-      const req=P.req, st=devStatus(v,req);
-      const dir = L.net==='zigbee'
-        ? (L.noHub?'허브 없음':(PROD[(S.devs.find(x=>x.id===L.parent)||{}).k]?('→ '+(S.devs.find(x=>x.id===L.parent).name)+(L.hops>1?` · ${L.hops}홉`:'')):'연결 없음'))
-        : (up<dn-0.5 ? '상향' : '하향');
-      const wl=ap?crossed(ap,d.x,d.y):[];
-      const rlab=RADIO[P.radio]?RADIO[P.radio].ko.split(' ')[0]:'';
-      const cnt={};
-      wl.forEach(w=>cnt[w.t]=(cnt[w.t]||0)+1);
-      const wtxt=Object.entries(cnt).filter(([k])=>k!=='glass'||true).map(([k,n])=>`${WT[k].ko.split(' ')[0]}${n>1?'×'+n:''}`).join(' · ')||'직선 경로';
-      let dist=ap?Math.hypot(d.x-ap.x,d.y-ap.y):0;
-      if(L.net==='zigbee'){ const pn=S.devs.find(x=>x.id===L.parent); if(pn) dist=Math.hypot(d.x-pn.x,d.y-pn.y); }
-      return {d,v,st,wtxt,dist,req,dir,rlab,net:L.net};
-    }).sort((a,b)=>(a.v-a.req)-(b.v-b.req));
-    el.innerHTML=rows.map(r=>`
-      <button class="dev ${sel&&sel.t==='dev'&&sel.id===r.d.id?'sel':''}" data-id="${r.d.id}">
-        <span class="sev" style="background:var(--${r.st.key})"></span>
-        <span>
-          <span class="nm">${esc(r.d.name)}</span>
-          <span class="meta mono">${S.simple
-            ? r.rlab+' · '+r.dist.toFixed(1)+' m'+(r.net==='zigbee'&&r.dir.startsWith('→')?' '+r.dir:'')
-            : r.rlab+' · '+r.dist.toFixed(1)+' m · '+(r.net==='zigbee'?r.dir:r.wtxt+' · '+r.dir)}</span>
-        </span>
-        <span class="rd"><b style="color:var(--${r.st.key})">${Math.round(r.v)}</b>
-        <span class="${S.simple?'big':''}" style="color:var(--${r.st.key})">${S.simple?simpleWord(r.st.key):r.st.ko}</span></span>
-      </button>`).join('');
-    el.querySelectorAll('.dev').forEach(b=>b.onclick=()=>{
-      sel={t:'dev',id:b.dataset.id};
-      const d=S.devs.find(x=>x.id===b.dataset.id);
-      openDev(d);
-    });
-  }
-  // 요약
-  const vals=S.devs.map(d=>({v:linkOf(d).eff, req:PROD[d.k].req}));
-  const worst=vals.length?Math.min(...vals.map(x=>x.v)):null;
-  const warn=vals.filter(x=>['warn','risk','bad'].includes(devStatus(x.v,x.req).key)).length;
-  const wk=worst!=null?bandOf(worst).key:'ink3';
-  document.getElementById('sWorst').innerHTML = worst!=null
-    ? `<span style="color:var(--${wk})">${Math.round(worst)}</span><span class="u"> dBm</span>` : '—';
-  document.getElementById('sWarn').innerHTML = `<span style="color:var(--${warn?'risk':'good'})">${warn}</span><span class="u"> 대</span>`;
-  document.getElementById('sAll').innerHTML = `${S.devs.length}<span class="u"> 대</span>`;
-  const cs=coverageStats();
-  document.getElementById('kCov').textContent = (S.net==='zigbee'?'Zigbee':'WiFi')+' 커버리지';
-  const ck=cs.pct>=99.5?'good':cs.pct>=95?'ok':cs.pct>=88?'warn':'bad';
-  document.getElementById('sCov').innerHTML =
-    `<span style="color:var(--${ck})">${cs.pct.toFixed(0)}</span><span class="u"> %</span>`;
-}
-
-function openDev(d){
-  const L=linkOf(d), dn=L.dn, up=L.up, eff=L.eff, ap=L.ap;
-  const P=PROD[d.k]||PROD['wifi.switch'];
-  const req=P.req, st=devStatus(eff,req);
-  const dnS=devStatus(dn,req), upS=devStatus(up,req);
-  const gs=[...new Set(Object.values(PROD).map(x=>x.g))];
-  const sel2=`<select id="dK">${gs.map(g=>`<optgroup label="${esc(g)}">${Object.entries(PROD).filter(([,v])=>v.g===g)
-      .map(([k,v])=>`<option value="${k}"${k===d.k?' selected':''}>${esc(v.ko)}</option>`).join('')}</optgroup>`).join('')}</select>`;
-  if(L.net==='zigbee'){
-    const pn=S.devs.find(x=>x.id===L.parent);
-    const hubs=backboneNodes().filter(x=>PROD[x.k].role==='hub');
-    openSheet(d.name,`
-      <div class="row" style="gap:10px">
-        <div class="field"><label>제품</label>${sel2}</div>
-        <div class="field"><label>표시 이름</label><input type="text" id="dN" value="${esc(d.name)}"></div>
-      </div>
-      <div class="sitem"><span><span class="t">Zigbee 링크 · 경로에서 가장 약한 구간</span>
-        <span class="d">${esc(P.ko)} · 송신 ${P.tx} dBm · 권장 ${req} dBm</span></span><span></span>
-        <span class="mono" style="font-size:19px;font-weight:600;color:var(--${st.key})">${(L.noHub||!pn)?'—':Math.round(eff)}</span>
-        <span class="mini" style="color:var(--${st.key})">${(L.noHub||!pn)?'허브 없음':st.ko}</span></div>
-      ${pn?`<div class="sitem"><span><span class="t">연결 부모</span><span class="d">${esc(pn.name)} · ${PROD[pn.k].role==='hub'?'허브 직결':'중계 경유'} · 허브까지 ${L.hops}홉</span></span><span></span>
-        <span class="mono">${Math.hypot(d.x-pn.x,d.y-pn.y).toFixed(1)} m</span></div>`:''}
-      <p class="note">${!hubs.length
-        ? '허브가 없어 계산할 수 없습니다. <b>기기</b> 모드에서 Aqara 허브 같은 코디네이터를 먼저 배치하세요.'
-        : (P.role==='end'
-           ? '배터리 기기라 <b>중계를 못 합니다.</b> 링크가 약하면 사이에 <b>상시전원 기기(플러그·중성선 스위치·릴레이)</b>를 하나 놓으면 메시가 이어집니다.'
-           : '상시전원이라 <b>다른 기기의 중계기 역할</b>을 합니다. 이 기기를 빼면 뒤에 매달린 기기가 함께 떨어집니다.')}</p>
-      <div class="row"><button class="tbtn pri" id="dOk">확인</button><button class="tbtn" id="dDel" style="color:var(--bad)">이 기기 삭제</button></div>`);
-    document.getElementById('dK').onchange=e=>{d.k=e.target.value; closeSheet(); commit();};
-    document.getElementById('dN').oninput=e=>{d.name=e.target.value; saveLocal(); draw(); renderList();};
-    document.getElementById('dOk').onclick=()=>{closeSheet();commit();};
-    document.getElementById('dDel').onclick=()=>{S.devs=S.devs.filter(x=>x.id!==d.id);sel=null;closeSheet();commit();};
-    return;
-  }
-  const wl=ap?crossed(ap,d.x,d.y):[];
-  const dist=ap?Math.hypot(d.x-ap.x,d.y-ap.y):0;
-  const pl0=S.band==='5'?46.4:40.0;
-  const dloss=pl0+10*S.n*Math.log10(Math.max(0.6,dist));
-  const wloss=wallLoss(wl,S.band);
-  openSheet(d.name,`
-    <div class="row" style="gap:10px">
-      <div class="field"><label>제품</label>${sel2}</div>
-      <div class="field"><label>표시 이름</label><input type="text" id="dN" value="${esc(d.name)}"></div>
-    </div>
-    ${P.role==='hub'?'<p class="note">이 허브는 <b>WiFi로 공유기에 붙습니다.</b> 아래 값이 나빠지면 허브에 물린 Zigbee 기기 전부가 앱·자동화에서 함께 빠집니다.</p>':''}
-    <div class="sitem"><span><span class="t">하향 · 공유기 → 기기</span><span class="d mono">공유기 EIRP ${ap?eirp(ap):0} dBm</span></span>
-      <span class="mono" style="font-size:17px;font-weight:600;color:var(--${dnS.key})">${Math.round(dn)}</span>
-      <span class="mini" style="color:var(--${dnS.key})">${dnS.ko}</span></div>
-    <div class="sitem"><span><span class="t">상향 · 기기 → 공유기</span><span class="d mono">기기 출력 ${P.tx} dBm · 권장 ${req} dBm</span></span>
-      <span class="mono" style="font-size:17px;font-weight:600;color:var(--${upS.key})">${Math.round(up)}</span>
-      <span class="mini" style="color:var(--${upS.key})">${upS.ko}</span></div>
-    <p class="note">${up<dn-0.5
-      ? '이 기기는 <b>상향(기기→공유기)</b>이 먼저 약해집니다. 휴대폰으로는 잘 잡히는데 기기만 탈락하는 전형적인 상황입니다.'
-      : '양방향이 비슷합니다. 하향 기준으로 판단하면 됩니다.'} 최종 판정은 나쁜 쪽인 <b style="color:var(--${st.key})">${Math.round(eff)} dBm · ${st.ko}</b>입니다.</p>
-    <span class="lbl">손실 내역</span>
-    <div class="sitem"><span class="t">거리 손실 <span class="d mono">${dist.toFixed(2)} m</span></span><span></span><span class="mono">−${dloss.toFixed(1)} dB</span></div>
-    <div class="sitem"><span class="t">벽 통과 <span class="d">${wl.length?wl.map(w=>WT[w.t].ko).join(', '):'없음'}</span></span><span></span><span class="mono">−${wloss.toFixed(1)} dB</span></div>
-    <div class="sitem"><span class="t">공유기 설치 감쇠 <span class="d">${(ENC.find(e=>e.v===(ap?.enc||0))||ENC[0]).ko}</span></span><span></span><span class="mono">−${(ap?.enc||0).toFixed(1)} dB</span></div>
-    <div class="sitem"><span class="t">설계 여유</span><span></span><span class="mono">−${S.fade.toFixed(1)} dB</span></div>
-    <div class="row"><button class="tbtn pri" id="dOk">확인</button><button class="tbtn" id="dDel" style="color:var(--bad)">이 기기 삭제</button></div>`);
-  document.getElementById('dK').onchange=e=>{d.k=e.target.value; commit();};
-  document.getElementById('dN').oninput=e=>{d.name=e.target.value; saveLocal(); draw(); renderList();};
-  document.getElementById('dOk').onclick=()=>{closeSheet();commit();};
-  document.getElementById('dDel').onclick=()=>{S.devs=S.devs.filter(x=>x.id!==d.id);sel=null;closeSheet();commit();};
-}
-
-function bomData(){
-  const rows=S.devs.map(d=>{const L=linkOf(d), req=PROD[d.k].req;
-    return {d, ...L, req, st:devStatus(L.eff,req)};});
-  const byKind={}; S.devs.forEach(d=>byKind[d.k]=(byKind[d.k]||0)+1);
-  const cnt={good:0,ok:0,warn:0,risk:0,bad:0}; rows.forEach(r=>cnt[r.st.key]++);
-  const main=S.aps.find(a=>a.wired!==false)||S.aps[0];
-  const cables=S.aps.filter(a=>a!==main && a.wired!==false).map(a=>({
-    a, m: (Math.abs(a.x-main.x)+Math.abs(a.y-main.y))*1.25 + 4   // 배관 우회·여유분 포함 개략치
-  }));
-  return {rows,byKind,cnt,main,cables};
-}
-function renderBom(){
-  const el=document.getElementById('bom');
-  const B=bomData(), b=bbox();
-  const L=[];
-  L.push(`<div class="bomhead">설계 조건</div>`);
-  L.push(row('주파수 대역', S.band==='5'?'5 GHz':'2.4 GHz'));
-  const A=planArea(), cs=coverageStats();
-  L.push(row(`커버 대상 면적<small>도면 외곽 안쪽 · 벽체 포함 (전용면적 아님)${ensureGrid().leaked?' · ⚠ 외곽선 미완성':''}</small>`,
-             `${A.toFixed(1)} ㎡ · ${(A/PYEONG).toFixed(1)}평`));
-  L.push(row(`커버리지<small>목표 ${S.covTarget||COV_TH} dBm 이상 · 미달 ${cs.areaBad.toFixed(1)} ㎡</small>`,
-             `${cs.pct.toFixed(1)} %`, cs.pct>=99.5?'good':cs.pct>=95?'warn':'bad'));
-  L.push(row('도면 외곽', `${b.w.toFixed(1)} × ${b.h.toFixed(1)} m`));
-  L.push(row('경로손실 지수 n · 설계 여유', `${S.n.toFixed(2)} · ${S.fade} dB`));
-
-  L.push(`<div class="bomhead">무선 장비 ${S.aps.length}대</div>`);
-  for(const a of S.aps){
-    const hp=apHealth(a);
-    const ch=(S.band==='5'?a.ch5:a.ch24)||'—';
-    const enc=(ENC.find(e=>e.v===(a.enc||0))||ENC[0]).ko;
-    const model=esc((AP_PRESETS[a.preset]||AP_PRESETS.custom).ko);
-    let link='유선';
-    if(a.wired===false){
-      link='무선 중계 · 자리 수신 '+Math.round(hp.v)+' dBm'+(hp.ok?'':' (부족)');
-    }
-    L.push(row(esc(a.name)+'<small>'+model+' · '+enc+' · '+link+'</small>',
-               eirp(a)+' dBm · '+ch+'ch', hp.ok?null:'bad'));
-  }
-  if(B.cables.length){
-    L.push(`<div class="bomhead">배선 (개략)</div>`);
-    let tot=0;
-    for(const c of B.cables){ tot+=c.m; L.push(row(`${esc(c.a.name)} 랜선<small>맨해튼 경로 × 1.25 + 여유 4 m</small>`, `${c.m.toFixed(1)} m`)); }
-    L.push(row('<b>UTP 총 소요</b>', `<b>${tot.toFixed(1)} m</b>`));
-  }
-
-  L.push(`<div class="bomhead">IoT 기기 ${S.devs.length}대</div>`);
-  for(const [k,n] of Object.entries(B.byKind)){
-    const v=PROD[k]||PROD['wifi.switch'];
-    const rl=RADIO[v.radio]?RADIO[v.radio].ko:v.radio;
-    const rr={hub:'허브',router:'상시전원·중계',end:'말단'}[v.role]||'';
-    L.push(row(`${esc(v.ko)}<small>${rl} · ${rr} · 권장 ${v.req} dBm · 출력 ${v.tx} dBm</small>`, `${n} 대`));
-  }
-
-  L.push(`<div class="bomhead">판정</div>`);
-  for(const [k,ko] of [['good','안정'],['ok','양호'],['warn','주의'],['risk','위험'],['bad','탈락']])
-    if(B.cnt[k]) L.push(row(ko, `${B.cnt[k]} 대`, k));
-
-  const act=B.rows.filter(r=>['warn','risk','bad'].includes(r.st.key));
-  if(act.length){
-    L.push(`<div class="bomhead">시공 전 조치 필요</div>`);
-    for(const r of act) L.push(row(`${esc(r.d.name)}<small>${PROD[r.d.k].ko} · 권장 ${r.req} dBm · ${r.up<r.dn-0.5?'상향':'하향'} 부족</small>`,
-                                   `${Math.round(r.eff)} dBm`, r.st.key));
-  }
-  el.innerHTML=L.join('');
-  function row(k,v,color){ return `<div class="bomrow"><span class="k">${k}</span><span class="v"${color?` style="color:var(--${color})"`:''}>${v}</span></div>`; }
-}
-function bomCsv(){
-  const B=bomData(), b=bbox(), q=v=>`"${String(v).replace(/"/g,'""')}"`;
-  const L=[['구분','항목','상세','값']];
-  L.push(['설계조건','주파수 대역','',S.band==='5'?'5 GHz':'2.4 GHz']);
-  const A2=planArea(), cs2=coverageStats();
-  L.push(['설계조건','커버 대상 면적','도면 외곽 안쪽(벽체 포함)',`${A2.toFixed(1)} m2 / ${(A2/PYEONG).toFixed(1)}평`]);
-  L.push(['설계조건','커버리지',`목표 ${S.covTarget||COV_TH} dBm / 미달 ${cs2.areaBad.toFixed(1)} m2`,`${cs2.pct.toFixed(1)} %`]);
-  L.push(['설계조건','도면 외곽','',`${b.w.toFixed(1)} x ${b.h.toFixed(1)} m`]);
-  L.push(['설계조건','경로손실 지수 n','',S.n.toFixed(2)]);
-  L.push(['설계조건','설계 여유','',S.fade+' dB']);
-  for(const a of S.aps){
-    const hp=apHealth(a);
-    L.push(['무선장비',a.name,(AP_PRESETS[a.preset]||AP_PRESETS.custom).ko+' / '+(ENC.find(e=>e.v===(a.enc||0))||ENC[0]).ko+' / '+(a.wired===false?`무선중계(자리 ${Math.round(hp.v)} dBm)`:'유선'),
-        `EIRP ${eirp(a)} dBm / ${(S.band==='5'?a.ch5:a.ch24)||'-'}ch`]);
-  }
-  for(const c of B.cables) L.push(['배선',c.a.name+' 랜선','맨해튼 x1.25 + 4m',c.m.toFixed(1)+' m']);
-  for(const r of B.rows)
-    L.push(['IoT기기',r.d.name,`${PROD[r.d.k].ko} / 권장 ${r.req} dBm / 하향 ${Math.round(r.dn)} / 상향 ${Math.round(r.up)}`,
-            `${Math.round(r.eff)} dBm ${r.st.ko}`]);
-  return '\ufeff'+L.map(r=>r.map(q).join(',')).join('\r\n');
-}
-function renderAdvice(){
-  const el=document.getElementById('advice');
-  const items=[];
-  if(!S.devs.length){
-    items.push(['기기 모드에서 설치 예정인 IoT 기기를 도면에 찍어 두면, 자리마다 예상 수신 세기와 통과하는 벽을 계산합니다.',null]);
-  } else {
-    const rows=S.devs.map(d=>({d, v:linkOf(d).eff, req:PROD[d.k].req}));
-    const bad=rows.filter(r=>['risk','bad'].includes(devStatus(r.v,r.req).key));
-    const warn=rows.filter(r=>devStatus(r.v,r.req).key==='warn');
-    const worst=rows.reduce((a,b)=>(a.v-a.req)<(b.v-b.req)?a:b);
-
-    if(bad.length){
-      items.push([`<b style="color:var(--bad)">${bad.length}대가 위험 구간</b>입니다 — ${bad.slice(0,3).map(r=>esc(r.d.name)).join(', ')}${bad.length>3?' 외':''}. 지금 상태로 시공하면 등록 후 탈락하거나 재접속을 반복할 가능성이 높습니다.`,'bad']);
-    } else if(warn.length){
-      items.push([`<b style="color:var(--warn)">${warn.length}대가 주의 구간</b>입니다 — ${warn.map(r=>esc(r.d.name)).join(', ')}. 가구 배치나 문 개폐에 따라 끊길 수 있는 여유입니다.`,'warn']);
-    } else {
-      items.push([`<b style="color:var(--good)">전 기기가 권장 수신 이상</b>입니다. 현재 공유기 위치로 시공해도 무리 없습니다.`,'good']);
-    }
-
-    const ap=linkOf(worst.d).ap;
-    if(ap){
-      const wl=crossed(ap,worst.d.x,worst.d.y);
-      const heavy=wl.filter(w=>att(w,S.band)>=9);
-      if(heavy.length){
-        const nm={}; heavy.forEach(w=>nm[WT[w.t].ko]=(nm[WT[w.t].ko]||0)+1);
-        items.push([`최약 기기 <b>${esc(worst.d.name)}</b>는 ${Object.entries(nm).map(([k,n])=>`${k} ${n}겹`).join(' + ')}을 통과합니다. 이 벽을 안 지나는 자리로 공유기를 옮기는 것이 증설보다 먼저입니다.`,null]);
-      }
-    }
-    if((ap?.enc||0)>=10){
-      items.push([`공유기가 <b>세대 단자함 안</b>으로 설정돼 있습니다. 금속함 밖 선반으로 빼는 것만으로 전 구간이 <span class="mono">+${ap.enc} dB</span> 좋아집니다. 현장에서 가장 싸게 해결되는 방법입니다.`,'warn']);
-    }
-    const hh=hubHealth();
-    if(hh) for(const h of hh){
-      if(['warn','risk','bad'].includes(h.st.key))
-        items.push([`<b style="color:var(--${h.st.key})">${esc(h.h.name)}의 WiFi 링크가 ${Math.round(h.v)} dBm</b>입니다. Zigbee 신호가 아무리 좋아도 <b>허브가 WiFi에서 떨어지면 그 아래 기기 전부가 앱·자동화에서 함께 빠집니다.</b> 허브를 공유기 가까이 옮기거나 <b>랜선으로 유선 연결</b>하세요 — 유선이면 이 위험이 사라집니다.`, h.st.key]);
-      else
-        items.push([`${esc(h.h.name)}의 WiFi 링크는 <span class="mono">${Math.round(h.v)} dBm</span>로 여유가 있습니다. 그래도 허브는 <b>유선 연결이 원칙</b>입니다 — WiFi 한 곳이 끊기면 Zigbee 기기 전체가 같이 멈춥니다.`, null]);
-    }
-    const cs=coverageStats(), A=planArea();
-    if(cs.pct<99.5){
-      items.push([`<b>${S.net==='zigbee'?'Zigbee':'WiFi'}</b> — 대상 ${A.toFixed(0)}㎡(${(A/PYEONG).toFixed(0)}평) 중 <b style="color:var(--${cs.pct>=95?'warn':'bad'})">${cs.areaBad.toFixed(1)}㎡</b>가 목표 ${netTarget()} dBm에 못 미칩니다(커버리지 ${cs.pct.toFixed(1)}%). 지금은 기기를 안 달았어도 <b>나중에 그 자리에 뭘 달면 탈락</b>합니다 — 히트맵 <b>미달 구역</b> 탭에서 위치를 확인하세요.`, cs.pct>=95?'warn':'bad']);
-    } else {
-      items.push([`대상 ${A.toFixed(0)}㎡(${(A/PYEONG).toFixed(0)}평) 전 구역이 목표 세기를 넘습니다. 지금 배치라면 어느 자리에 기기를 달아도 신호는 확보됩니다.`,'good']);
-    }
-    const upBound=S.devs.filter(x=>{const L=linkOf(x); return L.up<L.dn-2 && ['warn','risk','bad'].includes(devStatus(L.eff,PROD[x.k].req).key);});
-    if(upBound.length){
-      items.push([`${upBound.slice(0,2).map(x=>`<b>${esc(x.name)}</b>`).join(', ')}${upBound.length>2?' 외':''}는 <b>기기 쪽 송신이 약해</b> 상향에서 먼저 끊깁니다. 휴대폰으로 신호가 잡혀도 등록이 안 되면 이 경우이니, 공유기를 그 기기 쪽으로 더 당기거나 중계기를 세우세요.`,'warn']);
-    }
-    if(S.band==='2.4'){
-      items.push([`대부분의 IoT 모듈은 <b>2.4 GHz 전용</b>입니다. 5 GHz가 잘 잡혀도 소용없으니 기기 등록은 2.4 GHz 기준으로 판단하세요.`,null]);
-    } else {
-      items.push([`5 GHz는 같은 벽에서 2.4 GHz보다 <span class="mono">8~10 dB</span> 더 깎입니다. 스위치·센서류는 2.4 GHz로 다시 확인해 주세요.`,null]);
-    }
-    if(ghost){
-      items.push([`추천 위치로 옮기면 최약 기기 여유가 <span class="mono">${ghost.gain>=0?'+':''}${ghost.gain.toFixed(1)} dB</span> 달라집니다.`,'good']);
-    }
-  }
-  const shown=S.simple?items.slice(0,3):items;
-  el.innerHTML=shown.map(([t,k])=>`<div class="adv"><span class="dot" ${k?`style="background:var(--${k})"`:''}></span><span>${t}</span></div>`).join('')
-    + (ghost?`<button class="actbtn" id="applyGhost">추천 위치로 공유기 옮기기</button>`:'')
-    + (S.devs.length&&!ghost?`<div class="row"><button class="actbtn" id="runBest">최적 공유기 위치 찾기</button><button class="actbtn" id="runAuto">공유기 대수 자동 설계</button></div>`:'');
-  const ra=document.getElementById('runAuto'); if(ra) ra.onclick=()=>openAutoDesign();
-  const g=document.getElementById('applyGhost');
-  if(g) g.onclick=()=>{
-    const ap=(sel&&sel.t==='ap'?S.aps.find(a=>a.id===sel.id):null)||S.aps[0];
-    ap.x=ghost.x; ap.y=ghost.y; ghost=null; commit(); toast('공유기를 옮겼습니다');
-  };
-  const r=document.getElementById('runBest');
-  if(r) r.onclick=()=>findBest((sel&&sel.t==='ap'?S.aps.find(a=>a.id===sel.id):null)||S.aps[0]);
-}
-
-/* ============================================================
-   범례
-   ============================================================ */
-function paintNetTabs(){
-  const el=document.getElementById('netTabs');
-  const nz=S.devs.filter(d=>netOf(d)==='zigbee').length;
-  el.innerHTML=`
-    <button data-n="wifi"   aria-pressed="${S.net!=='zigbee'}">WiFi 2.4GHz</button>
-    <button data-n="zigbee" aria-pressed="${S.net==='zigbee'}">Zigbee 메시${nz?' · '+nz:''}</button>`;
-  el.onclick=e=>{
-    const b=e.target.closest('button'); if(!b) return;
-    S.net=b.dataset.n; heatDirty=true;
-    [...el.children].forEach(x=>x.setAttribute('aria-pressed', x.dataset.n===S.net));
-    paintLegend(); draw(); renderList(); renderAdvice(); saveLocal();
-  };
-}
-function paintViewTabs(){
-  const el=document.getElementById('viewTabs');
-  const keys=S.simple?['signal','gap']:Object.keys(VIEWS);
-  if(!keys.includes(S.view)) S.view='signal';
-  el.style.gridTemplateColumns=`repeat(${keys.length},1fr)`;
-  el.innerHTML=keys.map(k=>
-    `<button data-v="${k}" aria-pressed="${S.view===k}">${VIEWS[k].ko}</button>`).join('');
-  el.onclick=e=>{
-    const b=e.target.closest('button'); if(!b) return;
-    S.view=b.dataset.v; heatDirty=true;
-    [...el.children].forEach(x=>x.setAttribute('aria-pressed', x.dataset.v===S.view));
-    paintLegend(); draw(); saveLocal();
-  };
-}
-function paintLegend(){
-  const el=document.getElementById('legend');
-  const Z=S.net==='zigbee';
-  const BS=Z?ZBANDS:BANDS;
-  const sub=`<p class="note lgnote">${legendNote()}</p>`;
-  if(S.view==='gap'){
-    const cs=coverageStats();
-    el.innerHTML=`<div class="lgbar"><span style="background:var(--bad)"></span><span style="background:var(--good);opacity:.35"></span></div>
-      <div class="lgticks"><span>미달</span><span>충족</span></div>
-      <div class="lgnames"><span class="mono">${cs.areaBad.toFixed(1)} ㎡</span><span class="mono">${cs.pct.toFixed(1)}%</span></div>${sub}`;
-  } else if(S.view==='overlap'){
-    const steps=[['bad','0대','사각'],['warn','1대','단일'],['ok','2대','이중'],['good','3대+','충분']];
-    el.innerHTML=`<div class="lgbar">${steps.map(x=>`<span style="background:var(--${x[0]})"></span>`).join('')}</div>
-      <div class="lgticks">${steps.map(x=>`<span>${x[1]}</span>`).join('')}</div>
-      <div class="lgnames">${steps.map(x=>`<span>${x[2]}</span>`).join('')}</div>${sub}`;
-  } else {
-    const ticks=Z?['−55','−65','−75','−82','−88','−100']:['−50','−60','−67','−72','−78','−90'];
-    el.innerHTML=`<div class="lgbar">${BS.map(b=>`<span style="background:var(--${b.key})"></span>`).join('')}</div>
-      <div class="lgticks">${ticks.map(t=>`<span>${t}</span>`).join('')}</div>
-      <div class="lgnames"><span>안정</span><span>양호</span><span>주의</span><span>위험</span><span>탈락</span><span></span></div>${sub}`;
-  }
-}
-function legendNote(){
-  if(S.net==='zigbee'){
-    const back=backboneNodes(), hubs=back.filter(d=>PROD[d.k].role==='hub');
-    if(!hubs.length) return '허브가 없습니다. <b>기기</b> 모드에서 Aqara 허브 같은 코디네이터를 먼저 놓아야 Zigbee망이 생깁니다.';
-    if(S.view==='gap') return `배터리 센서(+4 dBm)를 그 자리에 놓았을 때 <b>${netTarget('zigbee')} dBm</b>을 못 넘는 구역입니다. <b>상시전원 기기(플러그·스위치)</b>를 중간에 하나 놓으면 메시가 이어집니다.`;
-    return `허브 ${hubs.length}대 + 중계 가능한 상시전원 기기 ${back.length-hubs.length}대 기준으로, 그 자리의 <b>배터리 센서</b>가 확보할 링크입니다. 배터리 센서끼리는 중계가 안 됩니다.`;
-  }
-  if(S.view==='gap') return `목표 <b>${S.covTarget||COV_TH} dBm</b>에 못 미치는 실내 구역을 빨갛게 칠합니다. 여기에 IoT 기기를 달면 탈락합니다 — <b>공유기 대수 자동 설계</b>로 채우세요.`;
-  if(S.view==='overlap') return `한 지점을 <b>${COV_TH} dBm 이상</b>으로 잡는 공유기가 몇 대인지 봅니다. 1대뿐인 구역은 그 공유기가 멈추거나 채널이 밀리면 바로 끊깁니다.`;
-  if(S.view==='failover') return S.aps.length<2
-    ? '공유기가 1대라서 이중화가 없습니다. 전 구역이 단일 장애점입니다 — 중계기를 세우면 이 화면이 채워집니다.'
-    : '가장 센 공유기 <b>1대가 멈췄을 때</b> 남는 신호입니다. 여기서 빨간 구역의 기기는 재부팅·펌웨어 업데이트 중에도 떨어집니다.';
-  return '공유기 → 기기 방향(하향) 예상 수신 세기입니다. 기기별 최종 판정은 상향까지 본 <b>나쁜 쪽</b> 기준입니다.';
-}
-
-/* ============================================================
-   벽 자동 인식 — 도면 이미지에서 벽 선분을 추출한다
-   원리: 벽 = 가장 어두운 «가늘고 긴» 채움. 어두운 픽셀 마스크에서
-   ① 벽 두께보다 넓은 덩어리(바닥 음영·가구 채움)를 침식/팽창으로 제거
-   ② 세로/가로 런 분석으로 직교 벽 사각형 추출
-   ③ 남은 성분에 직선 적합(실패 시 주축으로 쪼개 재시도) → 사선 벽
-   문·개구부는 채움이 끊긴 자리라서 저절로 뚫린다 (punch 불필요).
-   치수선·글자·문 호는 두께 2px 미만 / 잔차 초과로 걸러진다.
-   좌표는 원본 이미지 픽셀로 반환 — 호출부가 S.mpp 로 미터 환산.
+   벽 자동 인식 — wifi-sim 에서 검증한 구현 그대로
    ============================================================ */
 function traceWalls(src){
   const W0=src.width,H0=src.height;
@@ -2291,7 +217,6 @@ function traceWalls(src){
   const gray=new Uint8Array(N);
   for(let i=0;i<N;i++) gray[i]=(d[i*4]*77+d[i*4+1]*150+d[i*4+2]*29)>>8;
 
-  // Otsu 임계값 — 벽(어두움)과 배경을 가른다. 음영 오염을 막으려 상한 115
   const hist=new Float64Array(256);
   for(let i=0;i<N;i++) hist[gray[i]]++;
   let sum=0; for(let t=0;t<256;t++) sum+=t*hist[t];
@@ -2309,18 +234,14 @@ function traceWalls(src){
 
   const mask=new Uint8Array(N);
   for(let i=0;i<N;i++) mask[i]=gray[i]<T?1:0;
-  // 이미지 최외곽 2px 무시 (스크린샷 테두리·스캔 가장자리)
   for(let x=0;x<W;x++){mask[x]=mask[W+x]=mask[(H-1)*W+x]=mask[(H-2)*W+x]=0;}
   for(let y=0;y<H;y++){mask[y*W]=mask[y*W+1]=mask[y*W+W-1]=mask[y*W+W-2]=0;}
-  // 점 제거 (1px 창호 선은 살려야 하므로 이웃 2개까지 허용)
   const m2=new Uint8Array(mask);
   for(let y=1;y<H-1;y++)for(let x=1;x<W-1;x++){
     const i=y*W+x; if(!mask[i]) continue;
     let s=0; for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++) s+=mask[i+dy*W+dx];
     if(s<3) m2[i]=0;
   }
-  // 클로징(팽창→침식 2회) — 창호 이중선의 잔틈과 끊긴 얇은 선을 봉합한다.
-  // 문 개구부(수십 px)는 이 정도로 닫히지 않는다.
   {
     let cur=new Uint8Array(m2), nxt=new Uint8Array(N);
     for(let it=0;it<2;it++){
@@ -2339,10 +260,8 @@ function traceWalls(src){
       }
       const tmp=cur; cur=nxt; nxt=tmp;
     }
-    // 침식으로 원래 1px 선이 소멸했다면 원본을 보존 (합집합)
     for(let i=0;i<N;i++) m2[i]=m2[i]|cur[i];
   }
-  // 벽 두께보다 깊은 덩어리 제거 (침식으로 심을 찾고 팽창시켜 지움)
   {
     const r=Math.ceil(maxThick/2)+1;
     let cur=new Uint8Array(m2), nxt=new Uint8Array(N);
@@ -2369,7 +288,6 @@ function traceWalls(src){
   const segs=[];
   function median(arr){const s=arr.slice().sort((x,y)=>x-y);return s[s.length>>1];}
 
-  // 직교 벽: 열/행 런을 이어 붙여 사각형으로
   function sweep(vertical){
     const A=vertical?W:H, B=vertical?H:W;
     const at=(a,b)=>vertical?(b*W+a):(a*W+b);
@@ -2394,7 +312,7 @@ function traceWalls(src){
     for(const cm of comps){
       const thick=cm.a1-cm.a0+1;
       const b0=median(cm.b0s), b1=median(cm.b1s);
-      if(thick<2||thick>maxThick||b1-b0<minLen) continue;   // 1px 치수선·덩어리 배제
+      if(thick<2||thick>maxThick||b1-b0<minLen) continue;
       const ac=(cm.a0+cm.a1)/2;
       segs.push(vertical?{x1:ac,y1:b0,x2:ac,y2:b1,t:thick}:{x1:b0,y1:ac,x2:b1,y2:ac,t:thick});
       for(let a=cm.a0;a<=cm.a1;a++)for(let b=Math.round(b0);b<=Math.round(b1);b++){
@@ -2404,7 +322,6 @@ function traceWalls(src){
   }
   sweep(true); sweep(false);
 
-  // 사선 벽: 남은 성분에 직선 적합. ㄱ자면 주축 중간에서 쪼개 재시도
   function fitOrSplit(px,py,depth){
     const n=px.length;
     if(n<minLen*1.6) return;
@@ -2423,12 +340,10 @@ function traceWalls(src){
     }
     rms=Math.sqrt(rms/n);
     const len=pmax-pmin;
-    // 깊이 0은 엄격하게, 쪼갠 조각은 짧아도 허용 — 문 호가 현(chord) 폴리라인으로
-    // 근사되어 개구부를 «닫힌 문»처럼 막는다 (실내 인식이 새지 않는 핵심)
     const minL=depth?minLen*0.7:minLen*1.4, maxR=depth?2.2:3.2;
     const ok=l2>0&&l1/Math.max(l2,0.01)>=(depth?3:4)&&len>=minL&&rms<=maxR;
     if(ok){ segs.push({x1:mx+ex*pmin,y1:my+ey*pmin,x2:mx+ex*pmax,y2:my+ey*pmax,t:Math.max(2,rms*2.5)}); return; }
-    if(depth>=4||n<minLen*1.6) return;                      // 낙서·글자는 여기서 소멸
+    if(depth>=4||n<minLen*1.6) return;
     const Ax=[],Ay=[],Bx=[],By=[];
     for(let j=0;j<n;j++){
       const p=(px[j]-mx)*ex+(py[j]-my)*ey;
@@ -2455,21 +370,17 @@ function traceWalls(src){
     fitOrSplit(px,py,0);
   }
 
-  // 외곽 폐곡선 — 창호는 파란 선, 발코니는 옅은 채움이라 «어두움» 마스크에 안 잡힌다.
-  // 그래서 외곽만은 별도 마스크로 뜬다: 흰 배경이 아닌 모든 픽셀(색 선·채움 포함)을
-  // 막으로 보고 이미지 테두리에서 확산 → 못 닿은 덩어리(=집)의 윤곽을 따라
-  // «창호(glass)» 벽을 두른다. 창선 구간은 물리적으로도 창(3 dB)이 맞고,
-  // 이미 잡힌 외벽과 겹쳐도 3 dB 오차뿐이다.
+  // 외곽 폐곡선 — 흰 배경이 아닌 픽셀 확산의 여집합 윤곽을 창호(glass)로 두른다
   {
     let cur=new Uint8Array(N), nxt=new Uint8Array(N);
     for(let i=0;i<N;i++){
       const r=d[i*4],gg=d[i*4+1],bl=d[i*4+2];
       const sat=Math.max(r,gg,bl)-Math.min(r,gg,bl);
-      cur[i]=(gray[i]<228||sat>30)?1:0;                    // 흰 배경만 0
+      cur[i]=(gray[i]<228||sat>30)?1:0;
     }
     for(let x=0;x<W;x++){cur[x]=cur[W+x]=cur[(H-1)*W+x]=cur[(H-2)*W+x]=0;}
     for(let y=0;y<H;y++){cur[y*W]=cur[y*W+1]=cur[y*W+W-1]=cur[y*W+W-2]=0;}
-    for(let it=0;it<2;it++){                               // 잔틈 2px 봉합
+    for(let it=0;it<2;it++){
       nxt.set(cur);
       for(let y=1;y<H-1;y++)for(let x=1;x<W-1;x++){
         const i=y*W+x;
@@ -2485,8 +396,7 @@ function traceWalls(src){
       const p=st[--sp], x=p%W, y=(p-x)/W;
       if(x>0)pushO(p-1); if(x<W-1)pushO(p+1); if(y>0)pushO(p-W); if(y<H-1)pushO(p+W);
     }
-    // 실내 덩어리(면적 5% 이상)의 바깥 윤곽을 Moore 추적으로 딴다
-    const isB=i=>{ // 덩어리 경계 픽셀인가
+    const isB=i=>{
       if(out[i]) return false;
       const x=i%W,y=(i-x)/W;
       return x===0||y===0||x===W-1||y===H-1||out[i-1]||out[i+1]||out[i-W]||out[i+W];
@@ -2496,16 +406,13 @@ function traceWalls(src){
     for(let y0=1;y0<H-1;y0++)for(let x0=1;x0<W-1;x0++){
       const s0=y0*W+x0;
       if(out[s0]||blobSeen[s0]||!isB(s0)) continue;
-      // Moore 추적 — 면적 판정은 추적 후 bbox 로 어림
       const path=[];
-      let cx=x0, cy=y0;
-      let dir=0; // 진입 방향: 위가 out 이 되도록 시작점을 잡았으므로 0(→)부터
-      let guard=N*2, sx=x0, sy=y0, closed=false;
+      let cx=x0, cy=y0, dir=0, guard=N*2, sx=x0, sy=y0, closed=false;
       while(guard-->0){
         path.push([cx,cy]);
         let found=false;
-        for(let k=0;k<8;k++){
-          const dd=(dir+6+k)%8;                 // 왼손 규칙: 직전 방향의 왼쪽부터 훑는다
+        for(let kk=0;kk<8;kk++){
+          const dd=(dir+6+kk)%8;
           const nx2=cx+D8[dd][0], ny2=cy+D8[dd][1];
           if(nx2<0||ny2<0||nx2>=W||ny2>=H) continue;
           const ni=ny2*W+nx2;
@@ -2518,8 +425,7 @@ function traceWalls(src){
       if(!closed||path.length<minLen*4) continue;
       let pbx0=W,pby0=H,pbx1=0,pby1=0;
       for(const [px2,py2] of path){pbx0=Math.min(pbx0,px2);pbx1=Math.max(pbx1,px2);pby0=Math.min(pby0,py2);pby1=Math.max(pby1,py2);}
-      if((pbx1-pbx0)*(pby1-pby0)<N*0.05) continue;          // 라벨 상자 등 작은 폐곡선 배제
-      // Douglas–Peucker 단순화 (폐곡선: 절반씩) — 꼭짓점이 넘치면 눈금을 키워 재시도
+      if((pbx1-pbx0)*(pby1-pby0)<N*0.05) continue;
       let simp=[];
       for(let eps=3;eps<=24;eps*=2){
         simp=[];
@@ -2540,19 +446,17 @@ function traceWalls(src){
       }
       for(let j=0;j<simp.length;j++){
         const a=simp[j], b=simp[(j+1)%simp.length];
-        if(Math.hypot(b[0]-a[0],b[1]-a[1])<0.5) continue;  // 중복 꼭짓점만 배제 (틈을 만들지 않는다)
+        if(Math.hypot(b[0]-a[0],b[1]-a[1])<0.5) continue;
         segs.push({x1:a[0],y1:a[1],x2:b[0],y2:b[1],t:3,kind:'glass'});
       }
     }
   }
 
-  // 끝점 붙이기 — 모서리·T자 틈을 닫아 실내 인식(바깥 확산)이 새지 않게 한다.
-  // 문 개구부(~0.9 m)는 스냅 반경보다 훨씬 넓어서 닫히지 않는다.
+  // 끝점 붙이기 (폐곡선 제외)
   {
     const snap=Math.max(6,maxThick*0.9);
     const eps=[];
-    for(const s of segs){ if(s.kind!=='glass') eps.push([s,'x1','y1'],[s,'x2','y2']); }   // 폐곡선은 건드리지 않는다
-    // ① 끝점끼리
+    for(const s of segs){ if(s.kind!=='glass') eps.push([s,'x1','y1'],[s,'x2','y2']); }
     for(let i=0;i<eps.length;i++)for(let j=i+1;j<eps.length;j++){
       const [a,ax,ay]=eps[i],[b,bx,by]=eps[j];
       if(a===b) continue;
@@ -2562,7 +466,6 @@ function traceWalls(src){
         a[ax]=b[bx]=cx; a[ay]=b[by]=cy;
       }
     }
-    // ② 끝점 → 다른 벽 몸통 (T자 연결)
     for(const [s,kx,ky] of eps){
       let bd=snap,bx2=null,by2=null;
       for(const o of segs){
@@ -2579,13 +482,13 @@ function traceWalls(src){
     }
   }
 
-  // 종류 추정: 외곽 근접+두꺼움 = 외벽, 두꺼움 = 내력벽, 얇음 = 경량벽
+  // 종류: 외곽 근접+두꺼움=외벽, 두꺼움=내력벽, 얇음=경량벽 (폐곡선=창호 고정)
   let bx0=W,by0=H,bx1=0,by1=0;
   for(const s of segs){bx0=Math.min(bx0,s.x1,s.x2);bx1=Math.max(bx1,s.x1,s.x2);by0=Math.min(by0,s.y1,s.y2);by1=Math.max(by1,s.y1,s.y2);}
   const margin=Math.max(bx1-bx0,by1-by0)*0.055;
   const thickT=Math.max(4.5,W*0.0075);
   for(const s of segs){
-    if(s.kind) continue;                                   // 외곽 폐곡선(glass)은 유지
+    if(s.kind) continue;
     const mxp=(s.x1+s.x2)/2, myp=(s.y1+s.y2)/2;
     const dEdge=Math.min(mxp-bx0,bx1-mxp,myp-by0,by1-myp);
     if(dEdge<margin&&s.t>=thickT*0.8) s.kind='ext';
@@ -2595,33 +498,255 @@ function traceWalls(src){
   return segs;
 }
 
-// 인식 결과를 현재 축척으로 S.walls 에 싣는다. 성공 여부 반환
-function autoTraceWalls(c){
-  try{
-    let segs=traceWalls(c);
-    if(!segs||segs.length<8) return 0;                     // 도면이 아니거나 인식 실패
-    if(segs.length>150){                                   // 외곽 폐곡선(glass)은 지키고 나머지는 긴 순
-      const ring=segs.filter(s=>s.kind==='glass');
-      const rest=segs.filter(s=>s.kind!=='glass')
-        .sort((a,b)=>Math.hypot(b.x2-b.x1,b.y2-b.y1)-Math.hypot(a.x2-a.x1,a.y2-a.y1));
-      segs=ring.concat(rest.slice(0,Math.max(0,150-ring.length)));
-    }
-    S.walls=segs.map(s=>({x1:s.x1*S.mpp,y1:s.y1*S.mpp,x2:s.x2*S.mpp,y2:s.y2*S.mpp,t:s.kind}));
-    return segs.length;
-  }catch(e){ return 0; }
+/* ============================================================
+   기하 · 전파 (wifi-sim 검증 모델)
+   ============================================================ */
+function segCross(ax,ay,bx,by,cx,cy,dx,dy){
+  const dd=(dy-cy)*(bx-ax)-(dx-cx)*(by-ay);
+  if(Math.abs(dd)<1e-12) return false;
+  const ua=((dx-cx)*(ay-cy)-(dy-cy)*(ax-cx))/dd;
+  const ub=((bx-ax)*(ay-cy)-(by-ay)*(ax-cx))/dd;
+  return ua>0&&ua<1&&ub>0&&ub<1;
+}
+const WW=[1,1,0.75,0.6,0.5,0.4];
+function rssiAt(x,y){
+  let best=-200;
+  for(const ap of S.aps){
+    const losses=[];
+    for(const w of S.walls) if(segCross(ap.x,ap.y,x,y,w.x1,w.y1,w.x2,w.y2)) losses.push(WT[w.t].a);
+    losses.sort((p,q)=>q-p);
+    let wl=0;
+    for(let i=0;i<losses.length;i++) wl+=losses[i]*(WW[i]!==undefined?WW[i]:0.3);
+    wl=Math.min(wl,40);
+    const d=Math.max(0.6,Math.hypot(x-ap.x,y-ap.y));
+    const v=EIRP-(40.0+10*N_EXP*Math.log10(d))-wl-FADE;
+    if(v>best) best=v;
+  }
+  return best;
 }
 
-/* ============================================================
-   이미지 · 저장
-   ============================================================ */
+function bbox(){
+  let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;
+  const pt=(x,y)=>{x0=Math.min(x0,x);y0=Math.min(y0,y);x1=Math.max(x1,x);y1=Math.max(y1,y);};
+  for(const w of S.walls){pt(w.x1,w.y1);pt(w.x2,w.y2);}
+  if(S.bg){pt(0,0);pt(S.bg.w*S.mpp,S.bg.h*S.mpp);}
+  if(x0>x1) {x0=0;y0=0;x1=10;y1=8;}
+  return {x:x0,y:y0,w:x1-x0,h:y1-y0};
+}
+function ensureGrid(){
+  const bb=bbox();
+  const cell=Math.max(0.09, Math.max(bb.w,bb.h)/150);
+  const PAD=2;
+  const b={x:bb.x-PAD*cell, y:bb.y-PAD*cell, w:bb.w+2*PAD*cell, h:bb.h+2*PAD*cell};
+  const gw=Math.max(5,Math.ceil(b.w/cell)), gh=Math.max(5,Math.ceil(b.h/cell));
+  const sig=[S.walls.length,b.x.toFixed(3),b.y.toFixed(3),b.w.toFixed(3),b.h.toFixed(3)].join('|');
+  if(GRID && gridSig===sig) return GRID;
+  const wall=new Uint8Array(gw*gh);
+  for(const w of S.walls){
+    const L=Math.hypot(w.x2-w.x1,w.y2-w.y1), n=Math.max(2,Math.ceil(L/(cell*0.35)));
+    for(let k=0;k<=n;k++){
+      const t=k/n;
+      const i=Math.floor((w.x1+(w.x2-w.x1)*t-b.x)/cell), j=Math.floor((w.y1+(w.y2-w.y1)*t-b.y)/cell);
+      if(i>=0&&j>=0&&i<gw&&j<gh) wall[j*gw+i]=1;
+    }
+  }
+  const outside=new Uint8Array(gw*gh);
+  const q=[];
+  const push=(i,j)=>{ const p=j*gw+i; if(!outside[p]&&!wall[p]){outside[p]=1;q.push(p);} };
+  for(let i=0;i<gw;i++){ push(i,0); push(i,gh-1); }
+  for(let j=0;j<gh;j++){ push(0,j); push(gw-1,j); }
+  while(q.length){
+    const p=q.pop(), i=p%gw, j=(p-i)/gw;
+    if(i>0)push(i-1,j); if(i<gw-1)push(i+1,j); if(j>0)push(i,j-1); if(j<gh-1)push(i,j+1);
+  }
+  const inside=new Uint8Array(gw*gh);
+  let cnt=0;
+  for(let p=0;p<inside.length;p++) if(!outside[p]&&!wall[p]){ inside[p]=1; cnt++; }
+  const bboxCells=(bb.w/cell)*(bb.h/cell);
+  const leaked = !S.walls.length || cnt < bboxCells*0.35;
+  if(leaked){
+    inside.fill(0); cnt=0;
+    for(let j=PAD;j<gh-PAD;j++) for(let i=PAD;i<gw-PAD;i++){ inside[j*gw+i]=1; cnt++; }
+  }
+  GRID={b,cell,gw,gh,inside,leaked,area:cnt*cell*cell};
+  gridSig=sig;
+  return GRID;
+}
+
+/* ---------- 히트맵 + 판정 ---------- */
+let lastStats={dead:0,warn:0,total:0};
+function computeHeat(){
+  const G=ensureGrid();
+  const {b,cell,gw,gh,inside}=G;
+  heatCv=document.createElement('canvas'); heatCv.width=gw; heatCv.height=gh;
+  const hg=heatCv.getContext('2d');
+  const img=hg.createImageData(gw,gh);
+  let dead=0,warn=0,total=0;
+  for(let j=0;j<gh;j++)for(let i=0;i<gw;i++){
+    const p=j*gw+i;
+    if(!inside[p]) continue;
+    total++;
+    const v=S.aps.length?rssiAt(b.x+(i+0.5)*cell, b.y+(j+0.5)*cell):-200;
+    let r,g2,bl,a;
+    if(v<TH_BAD){ r=255;g2=92;bl=125;a=115; dead++; }
+    else if(v<TH_WARN){ r=239;g2=192;bl=78;a=80; warn++; }
+    else { r=46;g2=207;bl=142;a=34; }
+    const o=p*4; img.data[o]=r; img.data[o+1]=g2; img.data[o+2]=bl; img.data[o+3]=a;
+  }
+  hg.putImageData(img,0,0);
+  lastStats={dead:dead*cell*cell, warn:warn*cell*cell, total:total*cell*cell};
+  heatDirty=false;
+}
+
+/* ---------- 그리기 ---------- */
+const cv=document.getElementById('cv'), ctx=cv.getContext('2d');
+let CW=0,CH=0,DPR=1;
+function resize(){
+  DPR=Math.min(window.devicePixelRatio||1,2);
+  const r=cv.getBoundingClientRect();
+  CW=Math.max(1,Math.round(r.width)); CH=Math.max(1,Math.round(r.height));
+  cv.width=CW*DPR; cv.height=CH*DPR;
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  draw();
+}
+function fit(){
+  const b=bbox();
+  if(!(CW>0&&CH>0)) return;
+  const pad=34;
+  view.s=Math.min((CW-pad*2)/b.w,(CH-pad*2)/b.h);
+  view.ox=(CW-b.w*view.s)/2-b.x*view.s;
+  view.oy=(CH-b.h*view.s)/2-b.y*view.s;
+  userMoved=false;
+}
+const X=x=>x*view.s+view.ox, Y=y=>y*view.s+view.oy;
+const mx=px=>(px-view.ox)/view.s, my=py=>(py-view.oy)/view.s;
+
+function draw(){
+  ctx.clearRect(0,0,CW,CH);
+  const hasPlan=S.walls.length>0||S.bg;
+  if(!hasPlan) return;
+  // 배경 도면
+  if(S.bg&&S.bg.img){
+    ctx.globalAlpha=0.92;
+    ctx.drawImage(S.bg.img, X(0), Y(0), S.bg.w*S.mpp*view.s, S.bg.h*S.mpp*view.s);
+    ctx.globalAlpha=1;
+  } else {
+    // 샘플: 방 채움 + 라벨
+    for(const r of S.rooms){
+      ctx.fillStyle='rgba(236,238,246,0.06)';
+      ctx.fillRect(X(r[1]),Y(r[2]),(r[3]-r[1])*view.s,(r[4]-r[2])*view.s);
+      ctx.fillStyle='rgba(163,168,191,0.8)';
+      ctx.font='11px sans-serif'; ctx.textAlign='center';
+      ctx.fillText(r[0], X((r[1]+r[3])/2), Y((r[2]+r[4])/2));
+    }
+  }
+  // 히트맵
+  if(S.aps.length){
+    if(heatDirty||!heatCv) computeHeat();
+    const G=ensureGrid();
+    ctx.imageSmoothingEnabled=true;
+    ctx.drawImage(heatCv, X(G.b.x), Y(G.b.y), G.b.w*view.s, G.b.h*view.s);
+  }
+  // 벽
+  ctx.lineCap='round';
+  for(const w of S.walls){
+    const t=WT[w.t]||WT.light;
+    ctx.strokeStyle=t.c; ctx.lineWidth=Math.max(1.5,t.w*view.s/60);
+    ctx.beginPath(); ctx.moveTo(X(w.x1),Y(w.y1)); ctx.lineTo(X(w.x2),Y(w.y2)); ctx.stroke();
+  }
+  // 공유기
+  for(const ap of S.aps){
+    const px=X(ap.x),py=Y(ap.y);
+    ctx.fillStyle='#7F88FF'; ctx.strokeStyle='#fff';
+    ctx.beginPath(); ctx.arc(px,py,11,0,7); ctx.fill();
+    ctx.lineWidth=1.6;
+    ctx.beginPath(); ctx.arc(px,py+3,4.5,Math.PI*1.15,Math.PI*1.85); ctx.stroke();
+    ctx.beginPath(); ctx.arc(px,py+3,8,Math.PI*1.2,Math.PI*1.8); ctx.stroke();
+    ctx.fillStyle='#fff';
+    ctx.beginPath(); ctx.arc(px,py+4,1.6,0,7); ctx.fill();
+  }
+}
+
+/* ---------- 단계 배너 ---------- */
+function pyeongText(m2){ return (m2/3.3058).toFixed(0); }
+function renderStep(){
+  const el=document.getElementById('stepbar');
+  const hasPlan=S.walls.length>0||S.bg;
+  document.getElementById('empty').hidden=!!hasPlan;
+  document.getElementById('legend').hidden=!(hasPlan&&S.aps.length);
+  const hint=document.getElementById('hint');
+
+  if(!hasPlan){
+    el.innerHTML=`<span class="sn">1</span><span class="st">아파트 도면을 올려주세요</span>
+      <span class="sd">JPG · PNG · PDF — 네이버 부동산 평면도 캡처도 됩니다</span><span class="grow"></span>
+      <button class="abtn" id="sUp">도면 올리기</button>
+      <button class="abtn ghost" id="sSample">샘플로 구경하기</button>`;
+    document.getElementById('sUp').onclick=()=>document.getElementById('fileIn').click();
+    document.getElementById('sSample').onclick=loadSample;
+    hint.hidden=true;
+    return;
+  }
+  if(!S.sized){
+    el.innerHTML=`<span class="sn">2</span><span class="st">집 크기를 골라주세요</span>
+      <span class="sd">공급면적 기준 — 벽 분석 결과를 실제 치수로 맞춥니다</span><span class="grow"></span>
+      ${[20,25,30,34,40].map(p=>`<button class="chip" data-p="${p}">${p}평대</button>`).join('')}
+      <button class="chip" data-p="0">직접 입력</button>`;
+    el.querySelectorAll('[data-p]').forEach(b=>b.onclick=()=>{
+      let p=+b.dataset.p;
+      if(!p){ const v=prompt('공급면적을 평으로 입력하세요 (예: 46)'); p=parseFloat(v); if(!(p>5&&p<200)) return; }
+      scaleToPyeong(p+2);   // «20평대» → 22평 정도로 잡는다
+    });
+    hint.hidden=false; hint.textContent='벽 분석 결과입니다 — 두꺼운 선이 외벽·내력벽, 얇은 선이 경량벽·창호입니다.';
+    return;
+  }
+  if(!S.aps.length){
+    el.innerHTML=`<span class="sn">3</span><span class="st">공유기 자리를 도면에서 눌러주세요</span>
+      <span class="sd">보통 거실 TV장 위나 현관 단자함입니다 — 놓은 뒤에도 끌어서 옮길 수 있습니다</span>`;
+    hint.hidden=false; hint.textContent='도면에서 공유기가 있는(있을) 자리를 누르세요.';
+    return;
+  }
+  // 판정
+  const dead=lastStats.dead, warn=lastStats.warn, total=Math.max(0.01,lastStats.total);
+  const dp=dead/total*100;
+  let icon,msg;
+  if(dp<1.5){ icon='<span class="sn ok">✓</span>'; msg=`<span class="st" style="color:var(--good)">사각지대가 거의 없습니다</span>
+    <span class="sd">전체 ${total.toFixed(0)}㎡ 중 신호 미달 ${dead.toFixed(1)}㎡ — 이 위치면 안심입니다</span>`; }
+  else{ icon='<span class="sn bad">!</span>'; msg=`<span class="st" style="color:var(--bad)">신호 안 닿는 공간 ${dead.toFixed(1)}㎡ (${dp.toFixed(0)}%)</span>
+    <span class="sd">빨간 구역은 IoT 기기 등록이 안 될 수 있는 곳입니다 — 공유기를 끌어 옮겨보거나 한 대 더 놓아보세요</span>`; }
+  el.innerHTML=`${icon}${msg}<span class="grow"></span>
+    <button class="abtn ghost" id="sAdd">${addingAp?'놓을 곳을 누르세요…':'공유기 추가'}</button>
+    ${S.aps.length>1?'<button class="tbtn" id="sDel">마지막 공유기 빼기</button>':''}`;
+  document.getElementById('sAdd').onclick=()=>{ addingAp=!addingAp; renderStep(); };
+  const del=document.getElementById('sDel');
+  if(del) del.onclick=()=>{ S.aps.pop(); heatDirty=true; draw(); renderStep(); };
+  hint.hidden=false; hint.textContent='공유기 아이콘을 끌면 결과가 바로 바뀝니다. −70 dBm(IoT 등록 한계) 기준 판정입니다.';
+}
+
+/* ---------- 동작 ---------- */
+function toast(t){
+  const el=document.getElementById('toast');
+  el.textContent=t; el.classList.add('on');
+  clearTimeout(el._t); el._t=setTimeout(()=>el.classList.remove('on'),2600);
+}
+function loadSample(){
+  S=sampleState(); GRID=null; gridSig=''; heatDirty=true; addingAp=false;
+  fit(); draw(); renderStep();
+  toast('84㎡ 샘플입니다 — 공유기를 끌어 옮겨보세요');
+}
+document.getElementById('btnReset').onclick=()=>{
+  if(!confirm('처음 화면으로 돌아갈까요?')) return;
+  S=freshState(); GRID=null; gridSig=''; heatCv=null; addingAp=false;
+  draw(); renderStep();
+};
+
 function loadPlan(file){
   if(!file) return;
-  if(file.type==='application/pdf' || /\.pdf$/i.test(file.name)) return loadPdf(file);
+  if(file.type==='application/pdf'||/\.pdf$/i.test(file.name)) return loadPdf(file);
   const rd=new FileReader();
   rd.onload=()=>{
     const im=new Image();
     im.onload=()=>{
-      const max=1200, k=Math.min(1,max/Math.max(im.width,im.height));
+      const max=1200,k=Math.min(1,max/Math.max(im.width,im.height));
       const c=document.createElement('canvas');
       c.width=Math.round(im.width*k); c.height=Math.round(im.height*k);
       c.getContext('2d').drawImage(im,0,0,c.width,c.height);
@@ -2632,276 +757,128 @@ function loadPlan(file){
   rd.readAsDataURL(file);
 }
 async function loadPdf(file){
-  if(!window.pdfjsLib) return toast('PDF 모듈을 불러오지 못했습니다 — 도면을 캡처해 이미지로 올려 주세요');
+  if(!window.pdfjsLib) return toast('PDF 모듈을 못 불러왔습니다 — 캡처해서 이미지로 올려주세요');
   try{
     pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
     const pdf=await pdfjsLib.getDocument({data:await file.arrayBuffer()}).promise;
     const page=await pdf.getPage(1);
     const v0=page.getViewport({scale:1});
-    const k=Math.min(2.5, 1300/Math.max(v0.width,v0.height));
+    const k=Math.min(2.5,1300/Math.max(v0.width,v0.height));
     const vp=page.getViewport({scale:k});
     const c=document.createElement('canvas');
     c.width=Math.round(vp.width); c.height=Math.round(vp.height);
     const g=c.getContext('2d'); g.fillStyle='#fff'; g.fillRect(0,0,c.width,c.height);
     await page.render({canvasContext:g, viewport:vp}).promise;
     applyBg(c);
-    toast('PDF 1쪽을 불러왔습니다 — 축척을 맞춰 주세요');
-  }catch(e){ toast('PDF를 읽지 못했습니다 — 캡처해서 이미지로 올려 주세요'); }
+  }catch(e){ toast('PDF를 못 읽었습니다 — 캡처해서 이미지로 올려주세요'); }
 }
 function applyBg(c){
-  const url=c.toDataURL('image/jpeg',0.68);
+  const url=c.toDataURL('image/jpeg',0.8);
   const im2=new Image();
   im2.onload=()=>{
-    S.bg={url, w:c.width, h:c.height, img:im2};
-    S.mpp = 10/c.width;                 // 임시 축척: 가로 10 m 가정
-    S.rooms=[];
-    if(S.name&&S.name.startsWith('샘플')){   // 샘플 위에 올렸다면 샘플의 기기·공유기는 정리
-      S.name='내 현장'; S.devs=[]; sel=null; ghost=null;
-      S.aps=S.aps.slice(0,1);
-      if(S.aps[0]){ S.aps[0].x=c.width*S.mpp/2; S.aps[0].y=c.height*S.mpp/2; }
+    S=freshState();
+    S.bg={url,w:c.width,h:c.height,img:im2};
+    S.mpp=10/c.width;
+    let segs=[];
+    try{ segs=traceWalls(c); }catch(e){ segs=[]; }
+    if(segs&&segs.length>=8){
+      if(segs.length>150){
+        const ring=segs.filter(s=>s.kind==='glass');
+        const rest=segs.filter(s=>s.kind!=='glass')
+          .sort((a,b)=>Math.hypot(b.x2-b.x1,b.y2-b.y1)-Math.hypot(a.x2-a.x1,a.y2-a.y1));
+        segs=ring.concat(rest.slice(0,Math.max(0,150-ring.length)));
+      }
+      S.walls=segs.map(s=>({x1:s.x1*S.mpp,y1:s.y1*S.mpp,x2:s.x2*S.mpp,y2:s.y2*S.mpp,t:s.kind}));
+      toast(`벽 ${S.walls.length}개를 분석했습니다`);
+    } else {
+      toast('벽을 분석하지 못한 도면입니다 — 다른 캡처로 시도해 보세요');
     }
-    S.scaled=false; S.apTouched=false;       // 새 도면 — 축척·공유기 위치를 단계 안내가 다시 챙긴다
-    const n=autoTraceWalls(c);          // 벽 자동 인식 — 문·개구부는 끊긴 채움으로 저절로 뚫린다
-    fit(); commit();
-    toast(n
-      ? `벽 ${n}개를 자동 인식했습니다 — 틀린 곳만 벽·지우개 모드로 고치고, 축척을 맞춰 주세요`
-      : '벽을 자동 인식하지 못한 도면입니다 — 벽 모드에서 직접 그리고, 축척을 맞춰 주세요');
-    mode='view'; renderMode();
+    GRID=null; gridSig=''; heatDirty=true;
+    fit(); draw(); renderStep();
   };
   im2.src=url;
 }
+document.getElementById('fileIn').onchange=e=>{ loadPlan(e.target.files[0]); e.target.value=''; };
 
-function serialize(){
-  return {
-    name:S.name, mpp:S.mpp, band:S.band, n:S.n, fade:S.fade,
-    scaled:S.scaled, apTouched:S.apTouched,
-    rooms:S.rooms, walls:S.walls, aps:S.aps, devs:S.devs,
-    bg:S.bg?{w:S.bg.w,h:S.bg.h}:null,
-  };
-}
-function hydrate(o, imgUrl){
-  const st={...sampleState(), ...o};
-  (o.aps||[]).forEach(a=>{ if(a.tx===undefined){ a.tx=(a.power??20)-2; a.gain=2; a.preset=a.preset||'custom'; } });
-  (o.devs||[]).forEach(d=>{ if(LEGACY[d.k]) d.k=LEGACY[d.k]; if(!PROD_BASE[d.k]&&!(o.custom&&o.custom[d.k])) d.k='wifi.switch'; });
-  st.rooms=o.rooms||[]; st.walls=o.walls||[]; st.aps=o.aps||[]; st.devs=o.devs||[];
-  if(o.bg&&imgUrl){ st.bg={...o.bg, url:imgUrl, img:null}; }
-  else st.bg=null;
-  return st;
-}
-let saveT=null;
-function commit(quiet){
-  heatDirty=true; meshDirty=true; syncProd();
-  saveLocal();
-  if(quiet){ draw(); return; }
-  renderAll();
-}
-function saveLocal(){
-  try{
-    localStorage.setItem('wifisim.cur', JSON.stringify(serialize()));
-    if(S.bg) localStorage.setItem('wifisim.curimg', S.bg.url); else localStorage.removeItem('wifisim.curimg');
-  }catch(e){}
-}
-function loadLocal(){
-  try{
-    const raw=localStorage.getItem('wifisim.cur'); if(!raw) return null;
-    const o=JSON.parse(raw);
-    const st=hydrate(o, localStorage.getItem('wifisim.curimg'));
-    if(st.bg){ const i=new Image(); i.onload=()=>draw(); i.src=st.bg.url; st.bg.img=i; }
-    return st;
-  }catch(e){ return null; }
+function scaleToPyeong(p){
+  const target=p*3.3058;                 // 공급면적 ≈ 도면 외곽 면적으로 근사
+  const G=ensureGrid();
+  const f=Math.sqrt(target/Math.max(1,G.area));
+  S.mpp*=f;
+  for(const w of S.walls){w.x1*=f;w.y1*=f;w.x2*=f;w.y2*=f;}
+  for(const a of S.aps){a.x*=f;a.y*=f;}
+  S.sized=true;
+  GRID=null; gridSig=''; heatDirty=true;
+  fit(); draw(); renderStep();
 }
 
-/* --- 현장 목록: db 있으면 팀 공유, 없으면 이 기기에만 --- */
-let DB=null, DL=null;
-(async()=>{
-  try{ DB=await window.claude?.use?.('db'); }catch(e){}
-  try{ DL=await window.claude?.use?.('downloads'); }catch(e){}
-  document.getElementById('saveStat').textContent = DB
-    ? '현장 저장 — 이 링크를 가진 팀원 모두와 공유됩니다.'
-    : '현장 저장 — 이 브라우저에만 보관됩니다.';
-})();
-
-const CHUNK=170000;
-async function saveSite(name){
-  const id='s'+Date.now().toString(36);
-  const body=serialize(); body.name=name; body.updatedAt=new Date().toISOString();
-  if(DB){
-    await DB.doc('sites/'+id).set(body);
-    if(S.bg){
-      const u=S.bg.url;
-      for(let i=0,k=0;i<u.length;i+=CHUNK,k++){
-        await DB.doc(`sites/${id}/img/${String(k).padStart(3,'0')}`).set({d:u.slice(i,i+CHUNK)});
-      }
-    }
-  } else {
-    const all=JSON.parse(localStorage.getItem('wifisim.sites')||'{}');
-    all[id]={...body, _img:S.bg?S.bg.url:null};
-    localStorage.setItem('wifisim.sites', JSON.stringify(all));
+/* ---------- 포인터 ---------- */
+const pts=new Map();
+let pinch=null, pan=null, dragAp=null, downAt=null, moved=false, dragTick=0;
+function local(e){ const r=cv.getBoundingClientRect(); return {x:e.clientX-r.left,y:e.clientY-r.top}; }
+cv.addEventListener('pointerdown',e=>{
+  cv.setPointerCapture(e.pointerId);
+  const p=local(e); pts.set(e.pointerId,p);
+  if(pts.size===2){
+    const [a,b]=[...pts.values()];
+    pinch={d:Math.hypot(a.x-b.x,a.y-b.y),c:{x:(a.x+b.x)/2,y:(a.y+b.y)/2},s:view.s,ox:view.ox,oy:view.oy};
+    pan=null; dragAp=null; return;
   }
-  S.name=name; saveLocal(); updateChips();
-}
-async function listSites(){
-  if(DB){
-    const q=await DB.collection('sites').limit(200).get();
-    return q.docs.map(d=>({id:d.id, ...d.data()}));
+  downAt=p; moved=false;
+  for(const ap of S.aps){
+    if(Math.hypot(X(ap.x)-p.x,Y(ap.y)-p.y)<20){ dragAp=ap; return; }
   }
-  const all=JSON.parse(localStorage.getItem('wifisim.sites')||'{}');
-  return Object.entries(all).map(([id,v])=>({id,...v}));
-}
-async function openSite(id){
-  if(DB){
-    const d=await DB.doc('sites/'+id).get();
-    if(!d.exists) return toast('현장을 찾을 수 없습니다');
-    const o=d.data();
-    let url=null;
-    if(o.bg){
-      const q=await DB.collection(`sites/${id}/img`).limit(20).get();
-      url=q.docs.sort((a,b)=>a.id<b.id?-1:1).map(x=>x.data().d).join('');
-    }
-    applySite(o,url);
-  } else {
-    const all=JSON.parse(localStorage.getItem('wifisim.sites')||'{}');
-    const o=all[id]; if(!o) return toast('현장을 찾을 수 없습니다');
-    applySite(o,o._img||null);
+  pan={x:p.x,y:p.y,ox:view.ox,oy:view.oy};
+});
+cv.addEventListener('pointermove',e=>{
+  if(!pts.has(e.pointerId)) return;
+  const p=local(e); pts.set(e.pointerId,p);
+  if(downAt&&Math.hypot(p.x-downAt.x,p.y-downAt.y)>6) moved=true;
+  if(pinch&&pts.size>=2){
+    const [a,b]=[...pts.values()];
+    const k=Math.max(.2,Math.min(12,Math.hypot(a.x-b.x,a.y-b.y)/pinch.d));
+    const ns=pinch.s*k;
+    view.ox=pinch.c.x-(pinch.c.x-pinch.ox)*(ns/pinch.s);
+    view.oy=pinch.c.y-(pinch.c.y-pinch.oy)*(ns/pinch.s);
+    view.s=ns; userMoved=true; draw(); return;
   }
-}
-function applySite(o,url){
-  S=hydrate(o,url);
-  if(S.bg&&S.bg.url){ const i=new Image(); i.onload=()=>draw(); i.src=S.bg.url; S.bg.img=i; }
-  sel=null; ghost=null; closeSheet(); fit(); commit();
-  toast('현장을 불러왔습니다');
-}
-async function delSite(id){
-  if(DB){
-    try{
-      const q=await DB.collection(`sites/${id}/img`).limit(20).get();
-      for(const x of q.docs) await DB.doc(`sites/${id}/img/${x.id}`).delete();
-    }catch(e){}
-    await DB.doc('sites/'+id).delete();
-  } else {
-    const all=JSON.parse(localStorage.getItem('wifisim.sites')||'{}');
-    delete all[id]; localStorage.setItem('wifisim.sites', JSON.stringify(all));
+  if(dragAp){
+    dragAp.x=mx(p.x); dragAp.y=my(p.y);
+    heatDirty=true;
+    const now=performance.now();
+    if(now-dragTick>90){ dragTick=now; draw(); }
+    return;
   }
-}
-
-document.getElementById('btnSave').onclick=()=>{
-  openSheet('현장으로 저장', `
-    <div class="field"><label>현장 이름</label><input type="text" id="svName" value="${esc(S.name)}" placeholder="예: 래미안 101동 1503호"></div>
-    <div class="row"><button class="tbtn pri" id="svOk">저장</button>
-      <button class="tbtn" id="svPng">결과 이미지 저장</button><button class="tbtn" id="svJson">백업 파일 저장</button></div>
-    <p class="note">${DB?'저장한 현장은 이 링크를 가진 팀원 모두가 열 수 있습니다.':'이 브라우저에 저장됩니다. 다른 기기로 옮기려면 백업 파일을 쓰세요.'}</p>`);
-  document.getElementById('svOk').onclick=async()=>{
-    const n=document.getElementById('svName').value.trim()||'이름 없는 현장';
-    try{ await saveSite(n); closeSheet(); toast('저장했습니다'); }
-    catch(e){ toast('저장 실패: '+(e.message||e.code||'')); }
-  };
-  const p=document.getElementById('svPng'); if(p) p.onclick=exportPng;
-  const j=document.getElementById('svJson'); if(j) j.onclick=exportJson;
-};
-document.getElementById('btnMode').onclick=()=>{
-  S.simple=!S.simple;
-  paintViewTabs(); paintLegend(); heatDirty=true; commit();
-  toast(S.simple?'간단 모드 — 신호 도달 여부만 봅니다':'상세 모드 — 이중화·채널·산출서까지 봅니다');
-};
-document.getElementById('btnSites').onclick=async()=>{
-  openSheet('저장된 현장','<p class="note">불러오는 중…</p>');
-  let list=[];
-  try{ list=await listSites(); }catch(e){}
-  list.sort((a,b)=>String(b.updatedAt||'').localeCompare(String(a.updatedAt||'')));
-  document.getElementById('sheetBody').innerHTML = list.length
-    ? list.map(x=>`<div class="sitem"><span><span class="t">${esc(x.name||x.id)}</span>
-        <span class="d mono">벽 ${x.walls?.length||0} · 기기 ${x.devs?.length||0} · ${(x.updatedAt||'').slice(0,10)}</span></span>
-        <button class="mini" data-open="${x.id}">열기</button>
-        <button class="mini dgr" data-del="${x.id}">삭제</button></div>`).join('')
-    : '<p class="note">저장된 현장이 없습니다. 도면을 구성한 뒤 <b>저장</b>을 눌러 현장을 만들어 두면, 다음 세대 시공 때 그대로 불러다 쓸 수 있습니다.</p>';
-  document.getElementById('sheetBody').querySelectorAll('[data-open]').forEach(b=>b.onclick=()=>openSite(b.dataset.open));
-  document.getElementById('sheetBody').querySelectorAll('[data-del]').forEach(b=>b.onclick=async()=>{
-    if(!confirm('이 현장을 삭제할까요?')) return;
-    await delSite(b.dataset.del); b.closest('.sitem').remove();
-  });
-};
-
-// 아티팩트 안에서는 downloads 권한으로, 자체 호스팅에서는 일반 다운로드로 저장한다
-async function saveFile(filename, data, mime){
-  if(DL){
-    try{ await DL.save({filename, data}); toast('저장했습니다'); return; }
-    catch(e){ if(e.code!=='declined') toast('저장 실패'); return; }
+  if(pan){ view.ox=pan.ox+(p.x-pan.x); view.oy=pan.oy+(p.y-pan.y); userMoved=true; draw(); }
+});
+function endPointer(e){
+  pts.delete(e.pointerId);
+  if(pts.size<2) pinch=null;
+  if(dragAp){ dragAp=null; heatDirty=true; draw(); renderStep(); return; }
+  const hasPlan=S.walls.length>0||S.bg;
+  if(!moved&&downAt&&hasPlan&&S.sized&&(S.aps.length===0||addingAp)){
+    S.aps.push({id:'ap'+Date.now().toString(36), x:mx(downAt.x), y:my(downAt.y)});
+    addingAp=false;
+    heatDirty=true; draw(); renderStep();
   }
-  try{
-    const blob = data instanceof Blob ? data : new Blob([data],{type:mime||'text/plain;charset=utf-8'});
-    const url=URL.createObjectURL(blob);
-    const a=document.createElement('a');
-    a.href=url; a.download=filename; document.body.appendChild(a); a.click();
-    setTimeout(()=>{URL.revokeObjectURL(url); a.remove();},1500);
-    toast('저장했습니다');
-  }catch(e){ toast('이 브라우저에서는 저장할 수 없습니다'); }
+  pan=null; downAt=null;
 }
-function exportPng(){
-  const scale=2, c=document.createElement('canvas');
-  c.width=CW*scale; c.height=CH*scale;
-  c.getContext('2d').drawImage(cv,0,0,c.width,c.height);
-  c.toBlob(b=>saveFile((S.name||'현장')+'_전파진단.png', b), 'image/png');
-}
-function exportJson(){
-  const o=serialize(); if(S.bg) o._img=S.bg.url;
-  saveFile((S.name||'현장')+'.json', JSON.stringify(o), 'application/json');
-}
-function exportCsv(){ saveFile((S.name||'현장')+'_설계산출서.csv', bomCsv(), 'text/csv;charset=utf-8'); }
+cv.addEventListener('pointerup',endPointer);
+cv.addEventListener('pointercancel',endPointer);
+cv.addEventListener('wheel',e=>{
+  e.preventDefault();
+  const p=local(e), k=Math.exp(-e.deltaY*0.0016), ns=Math.max(6,Math.min(600,view.s*k));
+  view.ox=p.x-(p.x-view.ox)*(ns/view.s);
+  view.oy=p.y-(p.y-view.oy)*(ns/view.s);
+  view.s=ns; userMoved=true; draw();
+},{passive:false});
+document.getElementById('zIn').onclick=()=>{view.s*=1.25;view.ox=CW/2-(CW/2-view.ox)*1.25;view.oy=CH/2-(CH/2-view.oy)*1.25;draw();};
+document.getElementById('zOut').onclick=()=>{view.s/=1.25;view.ox=CW/2-(CW/2-view.ox)/1.25;view.oy=CH/2-(CH/2-view.oy)/1.25;draw();};
 
-/* ============================================================
-   시트 · 토스트
-   ============================================================ */
-const scrim=document.getElementById('scrim'), sheet=document.getElementById('sheet');
-function openSheet(title,html){
-  document.getElementById('sheetTitle').textContent=title;
-  document.getElementById('sheetBody').innerHTML=html;
-  scrim.classList.add('on'); sheet.classList.add('on');
-}
-function closeSheet(){ scrim.classList.remove('on'); sheet.classList.remove('on'); }
-scrim.onclick=closeSheet;
-document.addEventListener('keydown',e=>{ if(e.key==='Escape') closeSheet(); });
-
-let toastT=null;
-function toast(msg){
-  let t=document.getElementById('toast');
-  if(!t){
-    t=document.createElement('div'); t.id='toast';
-    t.style.cssText='position:fixed;left:50%;bottom:22px;transform:translateX(-50%);z-index:60;background:var(--ink);color:var(--bg);padding:9px 15px;border-radius:9px;font-size:12.5px;box-shadow:0 8px 26px rgba(0,0,0,.25);max-width:88vw;text-align:center';
-    document.body.appendChild(t);
-  }
-  t.textContent=msg; t.style.display='block';
-  clearTimeout(toastT); toastT=setTimeout(()=>t.style.display='none',2600);
-}
-
-/* ============================================================
-   부팅
-   ============================================================ */
-document.getElementById('nRange').oninput=e=>{
-  S.n=+e.target.value; heatDirty=true; document.getElementById('nVal').textContent=S.n.toFixed(2); commit(true); renderList(); renderAdvice();
-};
-document.getElementById('fmRange').oninput=e=>{
-  S.fade=+e.target.value; heatDirty=true; document.getElementById('fmVal').textContent=S.fade+' dB'; commit(true); renderList(); renderAdvice();
-};
-document.getElementById('nRange').value=S.n;
-document.getElementById('nVal').textContent=S.n.toFixed(2);
-document.getElementById('fmRange').value=S.fade;
-document.getElementById('fmVal').textContent=S.fade+' dB';
-
-document.getElementById('calAdv').onclick=()=>{ calAp=S.aps[0]; mode='cal'; renderMode(); window.scrollTo({top:0,behavior:'smooth'}); toast('실제로 측정한 지점을 도면에서 누르세요'); };
-document.getElementById('btnCsv').onclick=exportCsv;
-document.getElementById('btnPng2').onclick=exportPng;
-if(!S.view) S.view='signal';
-if(!S.net) S.net='wifi';
-S.custom=S.custom||{}; syncProd();
-if(S.aps.some(a=>!(S.band==='5'?a.ch5:a.ch24))) assignChannels();
-paintViewTabs(); paintLegend();
-resize(); fit();
-renderMode(); renderAll();
+/* ---------- 시작 ---------- */
+resize(); renderStep();
 window.addEventListener('resize',()=>{ resize(); if(!userMoved){ fit(); draw(); } });
-if(window.ResizeObserver) new ResizeObserver(()=>{ resize(); if(!userMoved){ fit(); draw(); } }).observe(cv.parentElement);
-matchMedia('(prefers-color-scheme:dark)').addEventListener?.('change',()=>{heatDirty=true;draw();});
-document.fonts?.ready.then(()=>draw());
+if(window.ResizeObserver) new ResizeObserver(()=>{ resize(); if(!userMoved){ fit(); draw(); } }).observe(document.getElementById('main'));
 </script>
-
 </body>
 </html>
