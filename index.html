@@ -903,6 +903,12 @@ function renderStep(){
   vt.querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed', String((S.view!=='orig')===(b.dataset.v==='cad'))));
   const hint=document.getElementById('hint');
 
+  if(S.pendingTrace){
+    el.innerHTML=`<span class="spin" aria-hidden="true"></span><span class="st">도면을 분석하고 있어요…</span>
+      <span class="sd">벽·창·문을 찾아 정리 도면으로 바꿉니다</span>`;
+    hint.hidden=true;
+    return;
+  }
   if(!hasPlan){
     el.innerHTML=`<span class="sn">1</span><span class="st">아파트 도면을 올려주세요</span>
       <span class="sd">JPG · PNG · PDF — 네이버 부동산 평면도 캡처도 됩니다</span><span class="grow"></span>
@@ -1014,23 +1020,102 @@ async function loadPdf(file){
     applyBg(c);
   }catch(e){ toast('PDF를 못 읽었습니다 — 캡처해서 이미지로 올려주세요'); }
 }
+/* ============================================================
+   LUX PRO 도면 엔진 호출 — 벽·창·문 «판단»은 워커에서 온다
+   (베끼기 방지 결정: 엔진 코드는 브라우저에 두지 않는다.
+    워커가 막히면 자체 인식(traceWalls)으로 조용히 폴백.)
+   응답 좌표는 워커 작업 해상도 → f 배율로 원본 px 환산.
+   ============================================================ */
+const PLAN_API='https://luxpro-plan.jjiya1225.workers.dev';
+async function engineTrace(c){
+  const w=c.width,h=c.height;
+  const px=c.getContext('2d',{willReadFrequently:true}).getImageData(0,0,w,h).data;
+  let body=px.buffer, enc='raw';
+  try{
+    const st=new Blob([px]).stream().pipeThrough(new CompressionStream('gzip'));
+    body=await new Response(st).arrayBuffer(); enc='gzip';
+  }catch(e){}
+  const ctrl=new AbortController();
+  const tid=setTimeout(()=>ctrl.abort(),15000);
+  const r=await fetch(`${PLAN_API}/api/plan/analyze?w=${w}&h=${h}&enc=${enc}`,
+    {method:'POST',headers:{'Content-Type':'application/octet-stream'},body,signal:ctrl.signal});
+  clearTimeout(tid);
+  if(!r.ok) return null;
+  const a=await r.json();
+  if(!a||!a.w) return null;
+  const f=w/a.w, T=a.thickness||4;
+  const segs=[];
+  for(const [x0,x1,yc,t] of a.H||[])     segs.push({x1:x0,y1:yc,x2:x1,y2:yc,t:t||T});
+  for(const [y0,y1,xc,t] of a.V||[])     segs.push({x1:xc,y1:y0,x2:xc,y2:y1,t:t||T});
+  for(const [x0,x1,yc]   of a.thinH||[]) segs.push({x1:x0,y1:yc,x2:x1,y2:yc,t:2,kind:'light'});
+  for(const [y0,y1,xc]   of a.thinV||[]) segs.push({x1:xc,y1:y0,x2:xc,y2:y1,t:2,kind:'light'});
+  for(const [x0,y0,x1,y1] of a.D||[])    segs.push({x1:x0,y1:y0,x2:x1,y2:y1,t:T*0.8});
+  // 기둥·짧은 두꺼운 토막 (가로 런) — 토막이 없으면 기둥이 투명해진다
+  for(const [bx,by,bl] of a.blobs||[]){
+    if(bl>=T*1.2) segs.push({x1:bx,y1:by,x2:bx+bl,y2:by,t:T});
+  }
+  // 창(1)은 유리로, 이음새(2)는 벽으로 잇는다. 개구부(0)는 열린 채로 둔다.
+  for(const [horiz,mid,from,to,kind] of a.openings||[]){
+    if(kind===0) continue;
+    const k=kind===1?'glass':'bear';
+    if(horiz) segs.push({x1:from,y1:mid,x2:to,y2:mid,t:kind===1?2:T,kind:k});
+    else      segs.push({x1:mid,y1:from,x2:mid,y2:to,t:kind===1?2:T,kind:k});
+  }
+  // 문: 경첩에서 반지름만큼 — 닫힌 목문(3 dB)으로 막는다
+  for(const [horiz,m,hinge,rr,dir] of a.doors||[]){
+    const d=(dir<0?-1:1)*rr;
+    if(horiz) segs.push({x1:hinge,y1:m,x2:hinge+d,y2:m,t:2.5,kind:'door'});
+    else      segs.push({x1:m,y1:hinge,x2:m,y2:hinge+d,t:2.5,kind:'door'});
+  }
+  if(segs.length<8) return null;
+  // 종류 추정(엔진이 안 준 것만): 외곽 근접+두꺼움=외벽, 두꺼움=내력벽, 얇음=경량벽
+  let bx0=1e9,by0=1e9,bx1=-1e9,by1=-1e9;
+  for(const s of segs){bx0=Math.min(bx0,s.x1,s.x2);bx1=Math.max(bx1,s.x1,s.x2);by0=Math.min(by0,s.y1,s.y2);by1=Math.max(by1,s.y1,s.y2);}
+  const margin=Math.max(bx1-bx0,by1-by0)*0.055;
+  for(const s of segs){
+    if(s.kind) continue;
+    const mxp=(s.x1+s.x2)/2, myp=(s.y1+s.y2)/2;
+    const dEdge=Math.min(mxp-bx0,bx1-mxp,myp-by0,by1-myp);
+    if(dEdge<margin&&s.t>=T*0.7) s.kind='ext';
+    else s.kind=s.t>=T*0.85?'bear':'light';
+  }
+  for(const s of segs){s.x1*=f;s.y1*=f;s.x2*=f;s.y2*=f;}
+  return segs;
+}
+
 function applyBg(c){
   const url=c.toDataURL('image/jpeg',0.8);
   const im2=new Image();
-  im2.onload=()=>{
+  im2.onload=async()=>{
     S=freshState();
     S.bg={url,w:c.width,h:c.height,img:im2};
     S.mpp=10/c.width;
-    let segs=[];
-    try{ segs=traceWalls(c); }catch(e){ segs=[]; }
+    S.pendingTrace=true;
+    GRID=null; gridSig=''; heatDirty=true;
+    fit(); draw(); renderStep();                           // 분석 중 화면 (원본 + 스피너)
+    const mine=S;
+    let segs=null, src='engine';
+    try{ segs=await engineTrace(c); }catch(e){ segs=null; }
+    if(!segs){ src='local'; try{ segs=traceWalls(c); }catch(e){ segs=[]; } }
+    if(S!==mine) return;                                   // 그 사이 새 도면이 왔다
+    S.pendingTrace=false;
     if(segs&&segs.length>=8){
-      if(segs.length>150){
+      if(segs.length>200){
         const ring=segs.filter(s=>s.kind==='glass');
         const rest=segs.filter(s=>s.kind!=='glass')
           .sort((a,b)=>Math.hypot(b.x2-b.x1,b.y2-b.y1)-Math.hypot(a.x2-a.x1,a.y2-a.y1));
-        segs=ring.concat(rest.slice(0,Math.max(0,150-ring.length)));
+        segs=ring.concat(rest.slice(0,Math.max(0,200-ring.length)));
       }
       S.walls=segs.map(s=>({x1:s.x1*S.mpp,y1:s.y1*S.mpp,x2:s.x2*S.mpp,y2:s.y2*S.mpp,t:s.kind}));
+      // 엔진 벽으로 실내 인식이 새면(외곽이 안 닫히면) 자체 인식의 폐곡선만 빌려와 닫는다
+      GRID=null; gridSig='';
+      if(src==='engine'&&ensureGrid().leaked){
+        try{
+          const ring=traceWalls(c).filter(s=>s.kind==='glass');
+          for(const s of ring) S.walls.push({x1:s.x1*S.mpp,y1:s.y1*S.mpp,x2:s.x2*S.mpp,y2:s.y2*S.mpp,t:'glass'});
+          GRID=null; gridSig='';
+        }catch(e){}
+      }
       toast(`벽 ${S.walls.length}개를 분석했습니다`);
       // 치수선이 있으면 축척까지 자동 (실패하면 평형 선택이 그대로 남는다)
       S.pendingDim=true;
